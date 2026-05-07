@@ -34,6 +34,7 @@ final class CaptureController: ObservableObject {
 
     private var recordingProcess: Process?
     private var nativeRecorder: NativeScreenRecorder?
+    private var requestedScreenRecordingAccessThisSession = false
 
     func reloadSources() async {
         do {
@@ -56,7 +57,6 @@ final class CaptureController: ObservableObject {
         showClicks: Bool
     ) async throws {
         guard !isRecording else { throw CaptureControllerError.recordingAlreadyRunning }
-        try ensureScreenRecordingPermission()
 
         try FileManager.default.createDirectory(
             at: outputURL.deletingLastPathComponent(),
@@ -64,19 +64,32 @@ final class CaptureController: ObservableObject {
         )
 
         if source.kind == .display || source.kind == .window {
-            let recorder = NativeScreenRecorder()
-            try await recorder.start(
-                source: source,
-                outputURL: outputURL,
-                includeMicrophone: includeMicrophone,
-                showCursor: showCursor,
-                showClicks: showClicks
-            )
-            nativeRecorder = recorder
-            activeRecordingURL = outputURL
-            isRecording = true
+            do {
+                try await startNativeRecording(
+                    source: source,
+                    outputURL: outputURL,
+                    includeMicrophone: includeMicrophone,
+                    showCursor: showCursor,
+                    showClicks: showClicks
+                )
+            } catch {
+                guard isLikelyScreenRecordingPermissionError(error) else {
+                    throw error
+                }
+
+                try ensureScreenRecordingPermission()
+                try await startNativeRecording(
+                    source: source,
+                    outputURL: outputURL,
+                    includeMicrophone: includeMicrophone,
+                    showCursor: showCursor,
+                    showClicks: showClicks
+                )
+            }
             return
         }
+
+        try ensureScreenRecordingPermission()
 
         var arguments = ["-x", "-v"]
         if showCursor {
@@ -173,11 +186,71 @@ final class CaptureController: ObservableObject {
             return
         }
 
+        guard !requestedScreenRecordingAccessThisSession else {
+            throw CaptureControllerError.screenRecordingPermissionDenied
+        }
+
+        requestedScreenRecordingAccessThisSession = true
         if CGRequestScreenCaptureAccess() {
             return
         }
 
         throw CaptureControllerError.screenRecordingPermissionDenied
+    }
+
+    private func startNativeRecording(
+        source: CaptureSource,
+        outputURL: URL,
+        includeMicrophone: Bool,
+        showCursor: Bool,
+        showClicks: Bool
+    ) async throws {
+        let recorder = NativeScreenRecorder()
+        try await recorder.start(
+            source: source,
+            outputURL: outputURL,
+            includeMicrophone: includeMicrophone,
+            showCursor: showCursor,
+            showClicks: showClicks
+        )
+        nativeRecorder = recorder
+        activeRecordingURL = outputURL
+        isRecording = true
+    }
+
+    private func isLikelyScreenRecordingPermissionError(_ error: Error) -> Bool {
+        if error is NativeScreenRecorderError {
+            return false
+        }
+
+        let nsError = error as NSError
+        let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+        let searchableText = [
+            nsError.domain,
+            nsError.localizedDescription,
+            nsError.localizedFailureReason,
+            nsError.localizedRecoverySuggestion,
+            underlyingError?.domain,
+            underlyingError?.localizedDescription
+        ]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+
+        let permissionTerms = [
+            "permission",
+            "screen recording",
+            "not authorized",
+            "not authorised",
+            "denied",
+            "declined",
+            "tcc"
+        ]
+        if permissionTerms.contains(where: { searchableText.contains($0) }) {
+            return true
+        }
+
+        return searchableText.contains("screencapturekit") && !CGPreflightScreenCaptureAccess()
     }
 
     private func argumentsForSource(_ source: CaptureSource, interactiveAreaMode: String) -> [String] {
