@@ -192,8 +192,8 @@ final class CaptureController: ObservableObject {
     }
     #endif
 
-    func reloadSources() async {
-        guard hasScreenRecordingPermission() else {
+    func reloadSources(requestScreenRecordingPermission: Bool = false) async {
+        guard canLoadPreviewSources(requestScreenRecordingPermission: requestScreenRecordingPermission) else {
             var nextSources = legacyDisplaySources()
             nextSources.append(contentsOf: legacyWindowSources())
             sources = nextSources
@@ -365,6 +365,18 @@ final class CaptureController: ObservableObject {
 
     private func hasScreenRecordingPermission() -> Bool {
         screenRecordingPermission.currentState() == .granted
+    }
+
+    private func canLoadPreviewSources(requestScreenRecordingPermission: Bool) -> Bool {
+        guard !hasScreenRecordingPermission() else {
+            return true
+        }
+
+        guard requestScreenRecordingPermission else {
+            return false
+        }
+
+        return screenRecordingPermission.requestGrant(allowRepeatedRequest: true) == .granted
     }
 
     private func startNativeRecording(
@@ -640,9 +652,13 @@ final class CaptureController: ObservableObject {
         configuration.ignoreShadowsDisplay = ignoreWindowShadow
         configuration.backgroundColor = NSColor(red: 0.13, green: 0.13, blue: 0.15, alpha: 1).cgColor
 
-        guard let image = try? await captureImage(contentFilter: contentFilter, configuration: configuration) else {
+        let image: CGImage
+        do {
+            image = try await captureImage(contentFilter: contentFilter, configuration: configuration)
+        } catch {
             return nil
         }
+
         return thumbnailData(from: image, maxSize: CGSize(width: 320, height: 180))
     }
 

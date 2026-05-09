@@ -53,7 +53,7 @@ struct SourceSelectorWindowView: View {
             preferredHeight = nextHeight
         }
         .onAppear {
-            model.reloadSources()
+            model.reloadSourcesForPreview()
         }
     }
 }
@@ -156,7 +156,7 @@ struct SourceSelectorCard: View {
                 .foregroundStyle(.secondary)
 
                 StudioButton(hitTarget: .rounded(8)) {
-                    model.reloadSources()
+                    model.reloadSourcesForPreview()
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                         .frame(height: 34)
@@ -387,50 +387,44 @@ struct SourceThumbnailPreview: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            let previewSize = fittedPreviewSize(in: size)
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.white.opacity(0.045))
 
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(0.045))
+            if let thumbnail = source.thumbnailData,
+               let image = NSImage(data: thumbnail) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                thumbnailPlaceholder
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
 
-                if let thumbnail = source.thumbnailData,
-                   let image = NSImage(data: thumbnail) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: previewSize.width, height: previewSize.height)
-                        .clipped()
-                } else {
-                    thumbnailPlaceholder
-                        .frame(width: previewSize.width, height: previewSize.height)
-                }
-
-                if isSelected {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .frame(width: 18, height: 18)
-                                .background(Color.brand, in: Circle())
-                                .foregroundStyle(.white)
-                        }
+            if isSelected {
+                VStack {
+                    HStack {
                         Spacer()
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(width: 18, height: 18)
+                            .background(Color.brand, in: Circle())
+                            .foregroundStyle(.white)
                     }
-                    .padding(6)
+                    Spacer()
                 }
+                .padding(6)
             }
-            .frame(width: previewSize.width, height: previewSize.height)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-            }
-            .frame(width: size.width, height: size.height, alignment: .center)
         }
-        .clipped()
+        .aspectRatio(aspectRatio, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        }
     }
 
     private var thumbnailPlaceholder: some View {
@@ -441,17 +435,6 @@ struct SourceThumbnailPreview: View {
         }
     }
 
-    private func fittedPreviewSize(in size: CGSize) -> CGSize {
-        let maxWidth = max(size.width, 1)
-        let maxHeight = max(size.height, 1)
-        let heightFromWidth = maxWidth / aspectRatio
-
-        if heightFromWidth <= maxHeight {
-            return CGSize(width: maxWidth, height: heightFromWidth)
-        }
-
-        return CGSize(width: maxHeight * aspectRatio, height: maxHeight)
-    }
 }
 
 struct SourceEmptyState: View {
@@ -491,4 +474,3 @@ struct SourceEmptyState: View {
         }
     }
 }
-

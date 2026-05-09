@@ -72,8 +72,14 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func refreshSources() async {
-        await capture.reloadSources()
+    func reloadSourcesForPreview() {
+        Task {
+            await refreshSources(requestScreenRecordingPermission: true)
+        }
+    }
+
+    func refreshSources(requestScreenRecordingPermission: Bool = false) async {
+        await capture.reloadSources(requestScreenRecordingPermission: requestScreenRecordingPermission)
         if selectedSource == nil || !capture.sources.contains(where: { $0.id == selectedSource?.id }) {
             selectedSource = capture.sources.first
         }

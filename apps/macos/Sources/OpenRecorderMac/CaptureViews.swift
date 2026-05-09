@@ -38,6 +38,9 @@ struct CaptureStudioView: View {
                 }
                 .padding(16)
                 .background(Color.studioMutedBackground)
+                .onAppear {
+                    model.reloadSourcesForPreview()
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -73,4 +76,3 @@ struct CaptureChoiceHUD: View {
         }
     }
 }
-

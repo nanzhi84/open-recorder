@@ -65,12 +65,16 @@ final class ScreenRecordingPermission {
         return .requestAvailable
     }
 
-    func requestGrant() -> ScreenRecordingPermissionRequestOutcome {
-        switch currentState() {
+    func requestGrant(allowRepeatedRequest: Bool = false) -> ScreenRecordingPermissionRequestOutcome {
+        let state = currentState()
+        switch state {
         case .granted:
             return .granted
         case .requestAlreadyShown:
-            return .promptAlreadyShown
+            guard allowRepeatedRequest else {
+                return .promptAlreadyShown
+            }
+            fallthrough
         case .requestAvailable:
             sessionPromptState = .requested
             client.setRequestedPrompt(true)

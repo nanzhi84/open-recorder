@@ -82,6 +82,26 @@ final class ScreenRecordingPermissionTests: XCTestCase {
         XCTAssertEqual(requestCount, 1)
     }
 
+    func testRepeatedScreenRecordingRequestCanBeForcedForPreviewRefresh() throws {
+        var requestCount = 0
+        var promptRequested = true
+        let permission = ScreenRecordingPermission(client: ScreenRecordingPermissionClient(
+            preflight: { false },
+            request: {
+                requestCount += 1
+                return true
+            },
+            hasRequestedPrompt: { promptRequested },
+            setRequestedPrompt: { promptRequested = $0 }
+        ))
+
+        let outcome = permission.requestGrant(allowRepeatedRequest: true)
+
+        XCTAssertEqual(outcome, .granted)
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertFalse(promptRequested)
+    }
+
     func testReloadSourcesDoesNotRequestScreenRecordingPermission() async {
         var requestCount = 0
         let permission = ScreenRecordingPermission(client: ScreenRecordingPermissionClient(
