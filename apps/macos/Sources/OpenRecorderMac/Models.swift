@@ -98,11 +98,39 @@ enum EditorMediaKind: String, Codable, Hashable {
     case video
     case screenshot
 
-    var badge: String {
+    var titleIconSystemName: String {
         switch self {
-        case .video: "MP4"
-        case .screenshot: "PNG"
+        case .video: "video.fill"
+        case .screenshot: "photo.fill"
         }
+    }
+
+    private var filenameExtensions: Set<String> {
+        switch self {
+        case .video: ["mov", "mp4", "m4v"]
+        case .screenshot: ["png", "jpg", "jpeg", "heic", "tiff", "gif", "webp"]
+        }
+    }
+
+    func displayTitle(for url: URL) -> String {
+        let title = url.deletingPathExtension().lastPathComponent
+        return title.isEmpty ? url.lastPathComponent : title
+    }
+
+    func displayTitle(for title: String, fallbackURL: URL? = nil) -> String {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = trimmedTitle.isEmpty ? fallbackURL.map(displayTitle(for:)) : trimmedTitle
+        guard let candidate, !candidate.isEmpty else {
+            return "Open Recorder Editor"
+        }
+
+        let candidateURL = URL(fileURLWithPath: candidate)
+        guard filenameExtensions.contains(candidateURL.pathExtension.lowercased()) else {
+            return candidate
+        }
+
+        let titleWithoutExtension = candidateURL.deletingPathExtension().lastPathComponent
+        return titleWithoutExtension.isEmpty ? candidate : titleWithoutExtension
     }
 }
 
@@ -123,12 +151,16 @@ struct EditorSession: Codable, Hashable, Identifiable {
         self.id = id
         self.kind = kind
         self.path = url.path
-        self.title = title ?? url.lastPathComponent
+        self.title = title ?? kind.displayTitle(for: url)
         self.recordingSession = recordingSession
     }
 
     var url: URL {
         URL(fileURLWithPath: path)
+    }
+
+    var displayTitle: String {
+        kind.displayTitle(for: title, fallbackURL: url)
     }
 }
 

@@ -125,6 +125,31 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertEqual(model.windowCommand?.editorSession, session)
     }
 
+    func testEditorSessionDefaultTitleOmitsFileExtension() {
+        let videoSession = EditorSession(kind: .video, url: URL(fileURLWithPath: "/tmp/example-recording.mp4"))
+        let screenshotSession = EditorSession(kind: .screenshot, url: URL(fileURLWithPath: "/tmp/example-screenshot.png"))
+
+        XCTAssertEqual(videoSession.title, "example-recording")
+        XCTAssertEqual(videoSession.displayTitle, "example-recording")
+        XCTAssertEqual(screenshotSession.title, "example-screenshot")
+        XCTAssertEqual(screenshotSession.displayTitle, "example-screenshot")
+    }
+
+    func testEditorSessionDisplayTitleStripsMatchingProvidedExtension() {
+        let url = URL(fileURLWithPath: "/tmp/example-recording.mp4")
+        let session = EditorSession(kind: .video, url: url, title: "Example Recording.mov")
+        let dottedTitleSession = EditorSession(kind: .video, url: url, title: "Example Recording v1.2")
+
+        XCTAssertEqual(session.title, "Example Recording.mov")
+        XCTAssertEqual(session.displayTitle, "Example Recording")
+        XCTAssertEqual(dottedTitleSession.displayTitle, "Example Recording v1.2")
+    }
+
+    func testEditorMediaKindTitleIconsMatchEditorType() {
+        XCTAssertEqual(EditorMediaKind.video.titleIconSystemName, "video.fill")
+        XCTAssertEqual(EditorMediaKind.screenshot.titleIconSystemName, "photo.fill")
+    }
+
     func testSelectingSourceMovesHUDToReadyState() {
         let model = AppModel()
         let source = CaptureSource(
