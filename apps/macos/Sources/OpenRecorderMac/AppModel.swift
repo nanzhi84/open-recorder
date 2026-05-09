@@ -882,16 +882,6 @@ final class AppModel: ObservableObject {
         requestWindow(.closeCameraSelector)
     }
 
-    func selectNoMicrophoneInput() {
-        disableMicrophone()
-        requestWindow(.closeMicrophoneSelector)
-    }
-
-    func selectNoCameraInput() {
-        disableCamera()
-        requestWindow(.closeCameraSelector)
-    }
-
     func disableMicrophone() {
         includeMicrophone = false
         statusMessage = "Microphone off"

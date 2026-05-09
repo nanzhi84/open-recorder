@@ -39,12 +39,22 @@ struct MicrophoneSelectorWindowView: View {
             ScrollView(.vertical) {
                 VStack(spacing: 6) {
                     StudioButton(hitTarget: .rounded(8)) {
+                        selectNoMicrophone()
+                    } label: {
+                        microphoneRow(
+                            title: "No Microphone",
+                            subtitle: "Do not record microphone audio",
+                            isSelected: !model.includeMicrophone
+                        )
+                    }
+
+                    StudioButton(hitTarget: .rounded(8)) {
                         selectMicrophone(nil)
                     } label: {
                         microphoneRow(
                             title: "System Default",
                             subtitle: "Use the current macOS default",
-                            isSelected: model.selectedMicrophoneDeviceID == nil
+                            isSelected: model.includeMicrophone && model.selectedMicrophoneDeviceID == nil
                         )
                     }
 
@@ -55,7 +65,7 @@ struct MicrophoneSelectorWindowView: View {
                             microphoneRow(
                                 title: device.name,
                                 subtitle: device.isDefault ? "Current macOS default" : "Microphone",
-                                isSelected: model.selectedMicrophoneDeviceID == device.id
+                                isSelected: model.includeMicrophone && model.selectedMicrophoneDeviceID == device.id
                             )
                         }
                     }
@@ -105,6 +115,11 @@ struct MicrophoneSelectorWindowView: View {
 
     private func selectMicrophone(_ deviceID: String?) {
         model.selectMicrophoneDevice(deviceID)
+        dismissWindow(id: "microphone-selector")
+    }
+
+    private func selectNoMicrophone() {
+        model.selectNoMicrophoneInput()
         dismissWindow(id: "microphone-selector")
     }
 
@@ -168,12 +183,22 @@ struct CameraSelectorWindowView: View {
             ScrollView(.vertical) {
                 VStack(spacing: 6) {
                     StudioButton(hitTarget: .rounded(8)) {
+                        selectNoCamera()
+                    } label: {
+                        cameraRow(
+                            title: "No Camera",
+                            subtitle: "Do not record facecam video",
+                            isSelected: !model.includeCamera
+                        )
+                    }
+
+                    StudioButton(hitTarget: .rounded(8)) {
                         selectCamera(nil)
                     } label: {
                         cameraRow(
                             title: "System Default",
                             subtitle: "Use the current macOS default",
-                            isSelected: model.selectedCameraDeviceID == nil
+                            isSelected: model.includeCamera && model.selectedCameraDeviceID == nil
                         )
                     }
 
@@ -184,7 +209,7 @@ struct CameraSelectorWindowView: View {
                             cameraRow(
                                 title: device.name,
                                 subtitle: device.isDefault ? "Current macOS default" : "Camera",
-                                isSelected: model.selectedCameraDeviceID == device.id
+                                isSelected: model.includeCamera && model.selectedCameraDeviceID == device.id
                             )
                         }
                     }
@@ -234,6 +259,11 @@ struct CameraSelectorWindowView: View {
 
     private func selectCamera(_ deviceID: String?) {
         model.selectCameraDevice(deviceID)
+        dismissWindow(id: "camera-selector")
+    }
+
+    private func selectNoCamera() {
+        model.selectNoCameraInput()
         dismissWindow(id: "camera-selector")
     }
 
