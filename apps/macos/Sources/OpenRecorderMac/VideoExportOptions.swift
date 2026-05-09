@@ -140,8 +140,32 @@ struct VideoExportOptions: Equatable {
     var resolution: VideoExportResolution
     var format: VideoExportFormat
     var frameRate: VideoExportFrameRate
+    var styling: VideoBackgroundStyling
 
-    static let `default` = VideoExportOptions(resolution: .source, format: .mov, frameRate: .source)
+    static let `default` = VideoExportOptions(
+        resolution: .source,
+        format: .mov,
+        frameRate: .source,
+        styling: .none
+    )
+
+    func with(
+        background: BackgroundStyle,
+        padding: Double,
+        borderRadius: Double,
+        shadow: Double,
+        backgroundBlur: Double
+    ) -> VideoExportOptions {
+        var copy = self
+        copy.styling = VideoBackgroundStyling(
+            background: background,
+            paddingRatio: max(0, padding) / 100 * 0.2,
+            borderRadiusRatio: max(0, borderRadius) / 100 * 0.4,
+            shadowIntensity: max(0, min(shadow, 1)),
+            backgroundBlurRatio: max(0, backgroundBlur) / 100 * 0.5
+        )
+        return copy
+    }
 }
 
 enum VideoExportPhase: Equatable {
@@ -239,7 +263,8 @@ enum VideoExportRenderer {
             preferredTransform: preferredTransform,
             outputSize: outputSize,
             duration: duration,
-            frameDuration: frameDuration
+            frameDuration: frameDuration,
+            styling: options.styling
         )
 
         if Task.isCancelled {
@@ -294,27 +319,47 @@ enum VideoExportRenderer {
         preferredTransform: CGAffineTransform,
         outputSize: CGSize,
         duration: CMTime,
-        frameDuration: CMTime
+        frameDuration: CMTime,
+        styling: VideoBackgroundStyling
     ) -> AVMutableVideoComposition {
         let naturalRect = CGRect(origin: .zero, size: sourceSize).applying(preferredTransform)
         let normalizedTransform = preferredTransform.translatedBy(x: -naturalRect.origin.x, y: -naturalRect.origin.y)
         let normalizedSize = CGSize(width: abs(naturalRect.width), height: abs(naturalRect.height))
-        let scale = min(outputSize.width / max(normalizedSize.width, 1), outputSize.height / max(normalizedSize.height, 1))
-        let scaledSize = CGSize(width: normalizedSize.width * scale, height: normalizedSize.height * scale)
-        let translation = CGAffineTransform(
-            translationX: (outputSize.width - scaledSize.width) / 2,
-            y: (outputSize.height - scaledSize.height) / 2
+
+        if styling.isPassthrough {
+            let scale = min(outputSize.width / max(normalizedSize.width, 1), outputSize.height / max(normalizedSize.height, 1))
+            let scaledSize = CGSize(width: normalizedSize.width * scale, height: normalizedSize.height * scale)
+            let translation = CGAffineTransform(
+                translationX: (outputSize.width - scaledSize.width) / 2,
+                y: (outputSize.height - scaledSize.height) / 2
+            )
+            let transform = normalizedTransform.concatenating(CGAffineTransform(scaleX: scale, y: scale)).concatenating(translation)
+
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+
+            let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
+            layerInstruction.setTransform(transform, at: .zero)
+            instruction.layerInstructions = [layerInstruction]
+
+            let composition = AVMutableVideoComposition()
+            composition.renderSize = outputSize
+            composition.frameDuration = frameDuration
+            composition.instructions = [instruction]
+            return composition
+        }
+
+        let instruction = VideoBackgroundCompositionInstruction(
+            timeRange: CMTimeRange(start: .zero, duration: duration),
+            trackID: videoTrack.trackID,
+            styling: styling,
+            preferredTransform: normalizedTransform,
+            normalizedSize: normalizedSize,
+            renderSize: outputSize
         )
-        let transform = normalizedTransform.concatenating(CGAffineTransform(scaleX: scale, y: scale)).concatenating(translation)
-
-        let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
-
-        let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
-        layerInstruction.setTransform(transform, at: .zero)
-        instruction.layerInstructions = [layerInstruction]
 
         let composition = AVMutableVideoComposition()
+        composition.customVideoCompositorClass = VideoBackgroundCompositor.self
         composition.renderSize = outputSize
         composition.frameDuration = frameDuration
         composition.instructions = [instruction]

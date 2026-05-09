@@ -8,13 +8,18 @@ struct VideoPreviewPanel: View {
     var videoURL: URL?
     var recordingSession: RecordingSession?
     @ObservedObject var playback: VideoPlaybackController
+    var background: BackgroundStyle = .transparent
+    var padding: Double = 0
+    var borderRadius: Double = 0
+    var shadow: Double = 0
+    var backgroundBlur: Double = 0
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
                 if videoURL != nil {
                     ZStack(alignment: .bottomTrailing) {
-                        PlaybackPreview(playback: playback)
+                        styledStage
                             .aspectRatio(16.0 / 9.0, contentMode: .fit)
                         recordingSessionBadges
                     }
@@ -58,6 +63,22 @@ struct VideoPreviewPanel: View {
             playback.load(url: url)
         } else {
             playback.clear()
+        }
+    }
+
+    private var styledStage: some View {
+        ZStack {
+            BackgroundFillView(style: background)
+                .blur(radius: CGFloat(backgroundBlur))
+                .clipped()
+            PlaybackPreview(playback: playback)
+                .clipShape(RoundedRectangle(cornerRadius: CGFloat(borderRadius), style: .continuous))
+                .shadow(
+                    color: Color.black.opacity(0.55 * shadow),
+                    radius: 38 * CGFloat(shadow),
+                    y: 18 * CGFloat(shadow)
+                )
+                .padding(CGFloat(padding))
         }
     }
 
