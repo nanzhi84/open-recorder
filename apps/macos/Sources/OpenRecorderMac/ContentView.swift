@@ -127,6 +127,112 @@ private extension View {
         }
         .onPreferenceChange(SizePreferenceKey.self, perform: onChange)
     }
+
+    func rectangularHitTarget() -> some View {
+        contentShape(Rectangle())
+    }
+
+    func roundedHitTarget(_ cornerRadius: CGFloat) -> some View {
+        contentShape(RoundedRectangle(cornerRadius: cornerRadius))
+    }
+
+    func capsuleHitTarget() -> some View {
+        contentShape(Capsule())
+    }
+
+    func circleHitTarget() -> some View {
+        contentShape(Circle())
+    }
+
+    @ViewBuilder
+    func studioHitTarget(_ target: StudioHitTarget) -> some View {
+        switch target {
+        case .rectangle:
+            rectangularHitTarget()
+        case .rounded(let cornerRadius):
+            roundedHitTarget(cornerRadius)
+        case .capsule:
+            capsuleHitTarget()
+        case .circle:
+            circleHitTarget()
+        }
+    }
+}
+
+private enum StudioHitTarget {
+    case rectangle
+    case rounded(CGFloat)
+    case capsule
+    case circle
+}
+
+private struct StudioButton<Label: View>: View {
+    var hitTarget: StudioHitTarget
+    var help: String?
+    var action: () -> Void
+    @ViewBuilder var label: () -> Label
+
+    init(
+        hitTarget: StudioHitTarget = .rectangle,
+        help: String? = nil,
+        action: @escaping () -> Void,
+        @ViewBuilder label: @escaping () -> Label
+    ) {
+        self.hitTarget = hitTarget
+        self.help = help
+        self.action = action
+        self.label = label
+    }
+
+    var body: some View {
+        let control = Button(action: action) {
+            label()
+                .studioHitTarget(hitTarget)
+        }
+        .buttonStyle(.plain)
+
+        if let help {
+            control.help(help)
+        } else {
+            control
+        }
+    }
+}
+
+private struct StudioMenu<Label: View, Content: View>: View {
+    var hitTarget: StudioHitTarget
+    var help: String?
+    @ViewBuilder var content: () -> Content
+    @ViewBuilder var label: () -> Label
+
+    init(
+        hitTarget: StudioHitTarget = .rectangle,
+        help: String? = nil,
+        @ViewBuilder content: @escaping () -> Content,
+        @ViewBuilder label: @escaping () -> Label
+    ) {
+        self.hitTarget = hitTarget
+        self.help = help
+        self.content = content
+        self.label = label
+    }
+
+    var body: some View {
+        let control = Menu {
+            content()
+        } label: {
+            label()
+                .studioHitTarget(hitTarget)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+
+        if let help {
+            control.help(help)
+        } else {
+            control
+        }
+    }
 }
 
 private enum NativeWindowRole {
@@ -559,7 +665,7 @@ private struct AreaSelectionWindowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 .opacity(selectionRect == nil ? 1 : 0)
             }
-            .contentShape(Rectangle())
+            .rectangularHitTarget()
             .gesture(selectionGesture(in: proxy.size))
             .onKeyPress(.escape) {
                 model.cancelInteractiveAreaSelection()
@@ -794,7 +900,7 @@ private struct SidebarButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        StudioButton(hitTarget: .rounded(8), help: title, action: action) {
             HStack(spacing: isExpanded ? 9 : 0) {
                 Image(systemName: symbolName)
                     .font(.system(size: 14, weight: .semibold))
@@ -812,8 +918,6 @@ private struct SidebarButton: View {
             .foregroundStyle(isActive ? Color.brand : Color.secondary)
             .background(isActive ? Color.brand.opacity(0.15) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
         }
-        .buttonStyle(.plain)
-        .help(title)
     }
 }
 
@@ -847,20 +951,19 @@ private struct StudioTitleBar: View {
     var body: some View {
         ZStack {
             HStack {
-                Button {
+                StudioButton(hitTarget: .rectangle) {
                     sidebarExpanded.toggle()
                 } label: {
                     Image(systemName: "sidebar.left")
                         .font(.system(size: 14, weight: .medium))
                         .frame(width: 32, height: 32)
                 }
-                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
 
                 Spacer()
 
                 if model.selectedSection == .editor, let videoURL {
-                    Button {
+                    StudioButton(hitTarget: .rounded(7)) {
                         model.exportCurrentRecording(videoURL)
                     } label: {
                         Label("Export Video", systemImage: "arrow.down.circle")
@@ -871,9 +974,8 @@ private struct StudioTitleBar: View {
                             .background(Color.brand, in: RoundedRectangle(cornerRadius: 7))
                             .foregroundStyle(Color.white)
                     }
-                    .buttonStyle(.plain)
                 } else if model.selectedSection == .editor, screenshotURL != nil {
-                    Button {
+                    StudioButton(hitTarget: .rounded(7)) {
                         model.requestScreenshotExport()
                     } label: {
                         Label("Export PNG", systemImage: "square.and.arrow.up")
@@ -884,7 +986,6 @@ private struct StudioTitleBar: View {
                             .background(Color.brand, in: RoundedRectangle(cornerRadius: 7))
                             .foregroundStyle(Color.white)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12)
@@ -1111,7 +1212,7 @@ private struct SourceSelectorCard: View {
                 .frame(height: 1)
 
             HStack {
-                Button {
+                StudioButton(hitTarget: .rounded(8)) {
                     onCancel?()
                 } label: {
                     Text("Cancel")
@@ -1120,10 +1221,9 @@ private struct SourceSelectorCard: View {
                         .padding(.horizontal, 12)
                         .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
                 }
-                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
 
-                Button {
+                StudioButton(hitTarget: .rounded(8)) {
                     model.reloadSources()
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
@@ -1131,12 +1231,11 @@ private struct SourceSelectorCard: View {
                         .padding(.horizontal, 12)
                         .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
                 }
-                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
 
                 Spacer()
 
-                Button {
+                StudioButton(hitTarget: .rounded(8)) {
                     onShare?()
                 } label: {
                     Text("Share Source")
@@ -1146,7 +1245,6 @@ private struct SourceSelectorCard: View {
                         .background(canShareSource ? Color.brand : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
                         .foregroundStyle(canShareSource ? Color.white : Color.secondary)
                 }
-                .buttonStyle(.plain)
                 .disabled(!canShareSource || onShare == nil)
             }
             .padding(16)
@@ -1183,24 +1281,38 @@ private struct SourceTabs: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(visibleTabs) { tab in
-                Button {
+                StudioSegmentedTabButton(
+                    title: tab.title,
+                    symbolName: tab.symbolName,
+                    isSelected: sourceTab == tab
+                ) {
                     sourceTab = tab
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: tab.symbolName)
-                        Text(tab.title)
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 32)
-                    .foregroundStyle(sourceTab == tab ? Color.primary : Color.secondary)
-                    .background(sourceTab == tab ? Color.white.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 7))
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(4)
         .background(Color.studioControl, in: RoundedRectangle(cornerRadius: 9))
+    }
+}
+
+private struct StudioSegmentedTabButton: View {
+    var title: String
+    var symbolName: String
+    var isSelected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        StudioButton(hitTarget: .rounded(7), action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: symbolName)
+                Text(title)
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+            .background(isSelected ? Color.white.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 7))
+        }
     }
 }
 
@@ -1251,14 +1363,13 @@ private struct SourceTile: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        StudioButton(hitTarget: .rounded(9), action: action) {
             if isCompact {
                 squareContent
             } else {
                 standardContent
             }
         }
-        .buttonStyle(.plain)
     }
 
     private var standardContent: some View {
@@ -1428,7 +1539,7 @@ private struct SourceEmptyState: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
             if sourceTab == .area {
-                Button {
+                StudioButton(hitTarget: .rounded(8)) {
                     onDrawArea?()
                 } label: {
                     Label("Draw Selection", systemImage: "rectangle.dashed")
@@ -1438,7 +1549,6 @@ private struct SourceEmptyState: View {
                         .background(Color.brand, in: RoundedRectangle(cornerRadius: 8))
                         .foregroundStyle(.white)
                 }
-                .buttonStyle(.plain)
                 .padding(.top, 4)
             }
         }
@@ -1639,7 +1749,7 @@ private struct CaptureHUD: View {
     }
 
     private var backButton: some View {
-        Button {
+        StudioButton(hitTarget: .circle, help: "Back") {
             if !model.capture.isRecording {
                 model.cancelCapture()
             }
@@ -1654,20 +1764,16 @@ private struct CaptureHUD: View {
                         .stroke(Color.white.opacity(0.09), lineWidth: 1)
                 }
         }
-        .buttonStyle(.plain)
         .disabled(model.capture.isRecording)
-        .help("Back")
     }
 
     private func sourcePicker(width: CGFloat = 208, textWidth: CGFloat = 154) -> some View {
-        Button {
+        StudioButton(hitTarget: .capsule, help: "Choose Source") {
             model.requestWindow(.showSourceSelector)
             openWindow(id: "source-selector")
         } label: {
             SourceChip(source: model.selectedSource, width: width, textWidth: textWidth)
         }
-        .buttonStyle(.plain)
-        .help("Choose Source")
     }
 
     private var compactCaptureControlGroup: some View {
@@ -1691,7 +1797,7 @@ private struct CaptureHUD: View {
     }
 
     private var compactDeviceMenu: some View {
-        Menu {
+        StudioMenu(hitTarget: .rectangle, help: "Devices") {
             Section("Microphone Device") {
                 deviceSelectionItems(devices: model.microphoneDevices, selectedDeviceID: $model.selectedMicrophoneDeviceID)
             }
@@ -1703,13 +1809,10 @@ private struct CaptureHUD: View {
                 .font(.system(size: 14, weight: .medium))
                 .frame(width: 34, height: 34)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .help("Devices")
     }
 
     private var narrowCaptureOptionsMenu: some View {
-        Menu {
+        StudioMenu(hitTarget: .circle, help: "Capture Options") {
             Button(model.includeSystemAudio ? "Turn Off System Audio" : "Turn On System Audio") {
                 model.includeSystemAudio.toggle()
             }
@@ -1736,9 +1839,6 @@ private struct CaptureHUD: View {
                         .stroke(Color.white.opacity(0.09), lineWidth: 1)
                 }
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .help("Capture Options")
     }
 
     @ViewBuilder
@@ -1827,16 +1927,13 @@ private struct CaptureHUD: View {
         devices: [CaptureDeviceInfo],
         selectedDeviceID: Binding<String?>
     ) -> some View {
-        Menu {
+        StudioMenu(hitTarget: .rectangle, help: title) {
             deviceSelectionItems(devices: devices, selectedDeviceID: selectedDeviceID)
         } label: {
             Image(systemName: symbolName)
                 .font(.system(size: 14, weight: .medium))
                 .frame(width: 34, height: 34)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .help(title)
     }
 
     @ViewBuilder
@@ -1925,7 +2022,7 @@ private struct HUDPrimaryButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        StudioButton(hitTarget: .capsule, action: action) {
             Label(title, systemImage: symbolName)
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
@@ -1936,7 +2033,6 @@ private struct HUDPrimaryButton: View {
                 .background(isDestructive ? Color.red.opacity(0.86) : Color.white, in: Capsule())
                 .foregroundStyle(isDestructive ? Color.white : Color.studioBackground)
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -1947,15 +2043,13 @@ private struct HUDPrimaryIconButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        StudioButton(hitTarget: .circle, help: title, action: action) {
             Image(systemName: symbolName)
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 42, height: 40)
                 .background(isDestructive ? Color.red.opacity(0.86) : Color.white, in: Circle())
                 .foregroundStyle(isDestructive ? Color.white : Color.studioBackground)
         }
-        .buttonStyle(.plain)
-        .help(title)
     }
 }
 
@@ -1966,7 +2060,7 @@ private struct HUDIconActionButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        StudioButton(hitTarget: .circle, help: title, action: action) {
             Image(systemName: symbolName)
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 38, height: 38)
@@ -1977,8 +2071,6 @@ private struct HUDIconActionButton: View {
                         .stroke(tint.opacity(0.28), lineWidth: 1)
                 }
         }
-        .buttonStyle(.plain)
-        .help(title)
     }
 }
 
@@ -1994,7 +2086,7 @@ private struct HUDPermissionGroup: View {
                 .foregroundStyle(Color.red.opacity(0.95))
                 .padding(.leading, 10)
 
-            Button(action: action) {
+            StudioButton(hitTarget: .capsule, action: action) {
                 Text("Settings")
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
@@ -2004,7 +2096,6 @@ private struct HUDPermissionGroup: View {
                     .background(Color.red.opacity(0.18), in: Capsule())
                     .foregroundStyle(Color.red.opacity(0.95))
             }
-            .buttonStyle(.plain)
         }
         .frame(height: 38)
         .padding(.trailing, 4)
@@ -2023,7 +2114,7 @@ private struct CaptureModeButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        StudioButton(hitTarget: .capsule, action: action) {
             Label(title, systemImage: symbolName)
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
@@ -2038,7 +2129,6 @@ private struct CaptureModeButton: View {
                         .stroke(Color.white.opacity(isActive ? 0 : 0.10), lineWidth: 1)
                 }
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -2159,6 +2249,7 @@ private struct SourceChip: View {
             Capsule()
                 .stroke(Color.white.opacity(0.10), lineWidth: 1)
         }
+        .capsuleHitTarget()
     }
 }
 
@@ -2191,7 +2282,7 @@ private struct HUDToggle: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        StudioButton(hitTarget: .circle, help: title, action: action) {
             Image(systemName: symbolName)
                 .font(.system(size: 14, weight: .medium))
                 .frame(width: 38, height: 38)
@@ -2202,8 +2293,6 @@ private struct HUDToggle: View {
                         .stroke(isActive ? Color.blue.opacity(0.35) : Color.white.opacity(0.09), lineWidth: 1)
                 }
         }
-        .buttonStyle(.plain)
-        .help(title)
     }
 }
 
@@ -2241,6 +2330,7 @@ private struct EditorStudioView: View {
 private struct VideoEditorStudioView: View {
     var videoURL: URL?
     var recordingSession: RecordingSession?
+    @StateObject private var playback = VideoPlaybackController()
     @State private var borderRadius = 12.0
     @State private var padding = 18.0
     @State private var shadow = 0.35
@@ -2252,11 +2342,11 @@ private struct VideoEditorStudioView: View {
     var body: some View {
         HStack(spacing: 16) {
             VStack(spacing: 12) {
-                VideoPreviewPanel(videoURL: videoURL, recordingSession: recordingSession)
+                VideoPreviewPanel(videoURL: videoURL, recordingSession: recordingSession, playback: playback)
                     .frame(maxHeight: .infinity)
                     .layoutPriority(1)
-                TimelinePanel()
-                    .frame(height: 240)
+                TimelinePanel(videoURL: videoURL, playback: playback)
+                    .frame(height: 320)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -2617,40 +2707,39 @@ private struct ScreenshotExportDialog: View {
             }
 
             VStack(spacing: 8) {
-                Button {
+                StudioButton(hitTarget: .rounded(8)) {
                     onSave()
                     dismiss()
                 } label: {
                     Label("Save", systemImage: "square.and.arrow.down")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(height: 36)
+                        .padding(.horizontal, 12)
+                        .background(Color.brand, in: RoundedRectangle(cornerRadius: 8))
+                        .foregroundStyle(Color.white)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .background(Color.brand, in: RoundedRectangle(cornerRadius: 8))
-                .foregroundStyle(Color.white)
 
-                Button {
+                StudioButton(hitTarget: .rounded(8)) {
                     onCopy()
                     dismiss()
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(height: 36)
+                        .padding(.horizontal, 12)
+                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                        .foregroundStyle(Color.primary)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-                .foregroundStyle(Color.primary)
             }
 
-            Button("Cancel") {
+            StudioButton(hitTarget: .rectangle) {
                 dismiss()
+            } label: {
+                Text("Cancel")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity)
         }
         .padding(18)
         .background(Color.studioPanel)
@@ -2829,7 +2918,7 @@ private struct ScreenshotSettingsPanel: View {
 
             HStack(spacing: 6) {
                 ForEach(ScreenshotBackgroundMode.allCases) { mode in
-                    Button {
+                    StudioButton(hitTarget: .rounded(7)) {
                         backgroundMode = mode
                     } label: {
                         Text(mode.title)
@@ -2839,14 +2928,13 @@ private struct ScreenshotSettingsPanel: View {
                             .background(backgroundMode == mode ? Color.brand : Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 7))
                             .foregroundStyle(backgroundMode == mode ? Color.white : Color.secondary)
                     }
-                    .buttonStyle(.plain)
                 }
             }
 
             if backgroundMode == .gradient {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
                     ForEach(gradients.indices, id: \.self) { index in
-                        Button {
+                        StudioButton(hitTarget: .rounded(8)) {
                             gradientIndex = index
                         } label: {
                             RoundedRectangle(cornerRadius: 8)
@@ -2857,7 +2945,6 @@ private struct ScreenshotSettingsPanel: View {
                                         .stroke(gradientIndex == index ? Color.brand : Color.white.opacity(0.10), lineWidth: gradientIndex == index ? 2 : 1)
                                 }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -2865,7 +2952,7 @@ private struct ScreenshotSettingsPanel: View {
             if backgroundMode == .color {
                 HStack(spacing: 8) {
                     ForEach(colorSwatches.indices, id: \.self) { index in
-                        Button {
+                        StudioButton(hitTarget: .circle) {
                             solidColor = colorSwatches[index]
                         } label: {
                             Circle()
@@ -2876,7 +2963,6 @@ private struct ScreenshotSettingsPanel: View {
                                         .stroke(Color.white.opacity(0.22), lineWidth: 1)
                                 }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -2907,7 +2993,7 @@ private struct Checkerboard: View {
 private struct VideoPreviewPanel: View {
     var videoURL: URL?
     var recordingSession: RecordingSession?
-    @StateObject private var playback = VideoPlaybackController()
+    @ObservedObject var playback: VideoPlaybackController
 
     var body: some View {
         VStack(spacing: 0) {
@@ -3130,7 +3216,7 @@ private struct PlaybackControlStrip: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button {
+            StudioButton(hitTarget: .circle) {
                 playback.togglePlayback()
             } label: {
                 Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
@@ -3139,7 +3225,6 @@ private struct PlaybackControlStrip: View {
                     .background(playback.isPlaying ? Color.white.opacity(0.10) : Color.white, in: Circle())
                     .foregroundStyle(playback.isPlaying ? Color.white : Color.black)
             }
-            .buttonStyle(.plain)
             .disabled(playback.player == nil)
             .opacity(playback.player == nil ? 0.45 : 1)
 
@@ -3198,7 +3283,7 @@ private struct PlaybackPreview: View {
                         .stroke(Color.studioBorder)
                 }
 
-            Button {
+            StudioButton(hitTarget: .capsule) {
                 playback.togglePlayback()
             } label: {
                 Label(playback.isPlaying ? "Pause" : "Play", systemImage: playback.isPlaying ? "pause.fill" : "play.fill")
@@ -3212,7 +3297,6 @@ private struct PlaybackPreview: View {
                     }
                     .foregroundStyle(.white)
             }
-            .buttonStyle(.plain)
             .disabled(playback.player == nil)
             .opacity(playback.player == nil ? 0.45 : 1)
             .padding(14)
@@ -3263,7 +3347,18 @@ private struct NativeVideoPlayer: NSViewRepresentable {
     }
 }
 
+private enum TimelineMetrics {
+    static let labelWidth: CGFloat = 96
+    static let rulerHeight: CGFloat = 24
+    static let clipHeight: CGFloat = 42
+    static let layerHeight: CGFloat = 34
+    static let playheadWidth: CGFloat = 1.5
+}
+
 private struct TimelinePanel: View {
+    var videoURL: URL?
+    @ObservedObject var playback: VideoPlaybackController
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
@@ -3289,35 +3384,8 @@ private struct TimelinePanel: View {
                 .fill(Color.studioBorder)
                 .frame(height: 1)
 
-            VStack(spacing: 0) {
-                TimelineRuler()
-                TimelineLayerRow(
-                    label: "Zoom",
-                    hint: "Press Z to add zoom",
-                    accent: Color.blue
-                )
-                TimelineLayerRow(
-                    label: "Trim",
-                    hint: "Press T to add trim",
-                    accent: Color.red
-                )
-                TimelineLayerRow(
-                    label: "Annotation",
-                    hint: "Press A to add annotation",
-                    accent: Color.purple
-                )
-                TimelineLayerRow(
-                    label: "Speed",
-                    hint: "Press S to add speed",
-                    accent: Color.orange
-                )
-                TimelineLayerRow(
-                    label: "Audio",
-                    hint: "No audio regions",
-                    accent: Color.green
-                )
-            }
-            .padding(12)
+            TimelineTrackContent(videoURL: videoURL, playback: playback)
+                .padding(12)
         }
         .background(Color.studioPanel.opacity(0.86), in: RoundedRectangle(cornerRadius: 10))
         .overlay {
@@ -3325,6 +3393,50 @@ private struct TimelinePanel: View {
                 .stroke(Color.studioBorder)
         }
         .shadow(color: Color.black.opacity(0.16), radius: 16, y: 10)
+    }
+}
+
+private struct TimelineTrackContent: View {
+    var videoURL: URL?
+    @ObservedObject var playback: VideoPlaybackController
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TimelineRuler(duration: playback.duration)
+            TimelineClipRow(
+                videoURL: videoURL,
+                duration: playback.duration,
+                seek: playback.seek(to:)
+            )
+            TimelineLayerRow(
+                label: "Zoom",
+                hint: "Press Z to add zoom",
+                accent: Color.blue
+            )
+            TimelineLayerRow(
+                label: "Trim",
+                hint: "Press T to add trim",
+                accent: Color.red
+            )
+            TimelineLayerRow(
+                label: "Annotation",
+                hint: "Press A to add annotation",
+                accent: Color.purple
+            )
+            TimelineLayerRow(
+                label: "Speed",
+                hint: "Press S to add speed",
+                accent: Color.orange
+            )
+            TimelineLayerRow(
+                label: "Audio",
+                hint: "No audio regions",
+                accent: Color.green
+            )
+        }
+        .overlay(alignment: .topLeading) {
+            TimelinePlayhead(duration: playback.duration, currentTime: playback.currentTime)
+        }
     }
 }
 
@@ -3346,30 +3458,256 @@ private struct TimelineTool: View {
 }
 
 private struct TimelineRuler: View {
+    var duration: Double
+
     var body: some View {
         HStack(spacing: 0) {
-            Text("")
-                .frame(width: 96)
+            Color.clear
+                .frame(width: TimelineMetrics.labelWidth)
             GeometryReader { proxy in
                 ZStack(alignment: .topLeading) {
-                    HStack {
-                        ForEach(0..<6, id: \.self) { index in
-                            Text(index == 0 ? "0:00" : "0:\(String(format: "%02d", index * 10))")
+                    ForEach(TimelineRulerTickBuilder.ticks(duration: displayDuration)) { tick in
+                        let x = tickPosition(for: tick.time, width: proxy.size.width)
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.10))
+                            .frame(width: 1, height: 6)
+                            .position(x: x, y: 4)
+
+                        if !tick.label.isEmpty {
+                            Text(tick.label)
                                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                                 .foregroundStyle(Color.secondary.opacity(0.72))
-                                .frame(maxWidth: .infinity, alignment: index == 0 ? .leading : .center)
+                                .frame(width: 44)
+                                .position(x: labelPosition(for: x, width: proxy.size.width), y: 11)
                         }
                     }
-
-                    Rectangle()
-                        .fill(Color.brand.opacity(0.95))
-                        .frame(width: 1, height: 228)
-                        .offset(x: proxy.size.width * 0.18)
                 }
             }
         }
-        .frame(height: 24)
+        .frame(height: TimelineMetrics.rulerHeight)
     }
+
+    private func tickPosition(for time: Double, width: CGFloat) -> CGFloat {
+        let fraction = min(max(time / displayDuration, 0), 1)
+        return width * CGFloat(fraction)
+    }
+
+    private func labelPosition(for x: CGFloat, width: CGFloat) -> CGFloat {
+        min(max(x, 22), max(22, width - 22))
+    }
+
+    private var displayDuration: Double {
+        duration.isFinite && duration > 0 ? duration : 6
+    }
+}
+
+private struct TimelinePlayhead: View {
+    var duration: Double
+    var currentTime: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            let trackWidth = max(proxy.size.width - TimelineMetrics.labelWidth, 0)
+            let x = TimelineMetrics.labelWidth + trackWidth * playheadFraction
+
+            Rectangle()
+                .fill(Color(red: 0.40, green: 0.31, blue: 1.0).opacity(0.98))
+                .frame(width: TimelineMetrics.playheadWidth, height: proxy.size.height)
+                .offset(x: x - TimelineMetrics.playheadWidth / 2)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var playheadFraction: CGFloat {
+        guard duration.isFinite, duration > 0, currentTime.isFinite else {
+            return 0
+        }
+        return CGFloat(min(max(currentTime / duration, 0), 1))
+    }
+}
+
+private struct TimelineClipRow: View {
+    var videoURL: URL?
+    var duration: Double
+    var seek: (Double) -> Void
+    @State private var waveformSamples = TimelineAudioWaveformLoader.quietSamples()
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Color.white.opacity(0.025)
+                .frame(width: TimelineMetrics.labelWidth, height: TimelineMetrics.clipHeight)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color(red: 0.095, green: 0.095, blue: 0.11))
+
+                    if videoURL != nil {
+                        clipBody
+                    } else {
+                        Text("No clip")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.secondary.opacity(0.64))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .rectangularHitTarget()
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            seek(to: value.location.x, width: proxy.size.width)
+                        }
+                )
+            }
+            .frame(height: TimelineMetrics.clipHeight)
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.studioBorder)
+                .frame(height: 1)
+        }
+        .task(id: videoURL) {
+            await loadWaveform()
+        }
+    }
+
+    private var clipBody: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color.timelineClip)
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.timelineClipBorder, lineWidth: 1)
+            }
+            .overlay(alignment: .bottom) {
+                TimelineWaveformPreview(samples: waveformSamples)
+                    .frame(height: 23)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 4)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .center) {
+                VStack(spacing: 2) {
+                    Label("Clip", systemImage: "rectangle.on.rectangle")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("\(formatClipDuration(duration)) @ 1x")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                }
+                .foregroundStyle(Color.white.opacity(0.86))
+                .shadow(color: Color.black.opacity(0.28), radius: 4, y: 2)
+                .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottomLeading) {
+                Text("0:00")
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.32))
+                    .padding(.leading, 9)
+                    .padding(.bottom, 4)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Text(formatPlaybackTime(duration))
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.32))
+                    .padding(.trailing, 9)
+                    .padding(.bottom, 4)
+            }
+            .overlay(alignment: .leading) {
+                TimelineTrimHandle()
+                    .offset(x: -12)
+            }
+            .overlay(alignment: .trailing) {
+                TimelineTrimHandle()
+                    .offset(x: 12)
+            }
+            .padding(.vertical, 5)
+            .padding(.horizontal, 7)
+    }
+
+    private func seek(to x: CGFloat, width: CGFloat) {
+        guard duration.isFinite, duration > 0, width > 0 else { return }
+        let fraction = min(max(x / width, 0), 1)
+        seek(duration * Double(fraction))
+    }
+
+    private func loadWaveform() async {
+        guard let videoURL else {
+            waveformSamples = TimelineAudioWaveformLoader.quietSamples()
+            return
+        }
+
+        waveformSamples = TimelineAudioWaveformLoader.quietSamples()
+        let samples = await TimelineAudioWaveformLoader.loadSamples(from: videoURL)
+        guard !Task.isCancelled else { return }
+        waveformSamples = samples
+    }
+}
+
+private struct TimelineTrimHandle: View {
+    var body: some View {
+        Circle()
+            .fill(Color.timelineHandle)
+            .frame(width: 24, height: 24)
+            .overlay {
+                Image(systemName: "scissors")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.black.opacity(0.82))
+            }
+            .overlay {
+                Circle()
+                    .stroke(Color.black.opacity(0.20), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.24), radius: 6, y: 3)
+    }
+}
+
+private struct TimelineWaveformPreview: View {
+    var samples: [Double]
+
+    var body: some View {
+        Canvas { context, size in
+            let levels = samples.isEmpty ? TimelineAudioWaveformLoader.quietSamples() : samples
+            guard !levels.isEmpty, size.width > 0, size.height > 0 else { return }
+
+            let step = size.width / CGFloat(max(levels.count - 1, 1))
+            var fillPath = Path()
+            var strokePath = Path()
+
+            fillPath.move(to: CGPoint(x: 0, y: size.height))
+
+            for (index, sample) in levels.enumerated() {
+                let x = CGFloat(index) * step
+                let boostedLevel = CGFloat(sqrt(max(0.0, min(sample, 1.0))))
+                let height = max(2, boostedLevel * (size.height - 2))
+                let point = CGPoint(x: x, y: size.height - height)
+
+                if index == 0 {
+                    fillPath.addLine(to: point)
+                    strokePath.move(to: point)
+                } else {
+                    fillPath.addLine(to: point)
+                    strokePath.addLine(to: point)
+                }
+            }
+
+            fillPath.addLine(to: CGPoint(x: size.width, y: size.height))
+            fillPath.closeSubpath()
+
+            context.fill(fillPath, with: .color(Color.white.opacity(0.18)))
+            context.stroke(strokePath, with: .color(Color.white.opacity(0.24)), lineWidth: 1)
+        }
+    }
+}
+
+private func formatClipDuration(_ seconds: Double) -> String {
+    guard seconds.isFinite, seconds > 0 else {
+        return "0s"
+    }
+
+    if seconds < 60 {
+        return "\(max(1, Int(seconds.rounded())))s"
+    }
+
+    return formatPlaybackTime(seconds)
 }
 
 private struct TimelineLayerRow: View {
@@ -3383,7 +3721,7 @@ private struct TimelineLayerRow: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Color.secondary.opacity(0.86))
                 .lineLimit(1)
-                .frame(width: 96, height: 42, alignment: .leading)
+                .frame(width: TimelineMetrics.labelWidth, height: TimelineMetrics.layerHeight, alignment: .leading)
                 .padding(.leading, 10)
                 .background(Color.white.opacity(0.025))
 
@@ -3398,7 +3736,7 @@ private struct TimelineLayerRow: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 }
             }
-            .frame(height: 42)
+            .frame(height: TimelineMetrics.layerHeight)
         }
         .overlay(alignment: .bottom) {
             Rectangle()
@@ -3531,14 +3869,13 @@ private struct SettingsInspector: View {
             InspectorSlider(title: "Roundness", valueText: "\(Int(borderRadius))px", value: $borderRadius, range: 0...25, step: 0.5)
             InspectorSlider(title: "Padding", valueText: "\(Int(padding))%", value: $padding, range: 0...100, step: 1)
             InspectorSlider(title: "Background Blur", valueText: String(format: "%.1fpx", backgroundBlur), value: $backgroundBlur, range: 0...8, step: 0.25)
-            Button {} label: {
+            StudioButton(hitTarget: .rounded(8), action: {}) {
                 Label("Crop Video", systemImage: "crop")
                     .font(.system(size: 11, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .frame(height: 34)
                     .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.plain)
             BackgroundPalette()
         case .cursor:
             InspectorSwitch(title: "Show Cursor", isOn: $model.showCursor)
@@ -3546,7 +3883,7 @@ private struct SettingsInspector: View {
             InspectorSlider(title: "Size", valueText: String(format: "%.2fx", cursorSize), value: $cursorSize, range: 0.5...10, step: 0.05)
             InspectorSlider(title: "Smoothing", valueText: String(format: "%.2f", cursorSmoothing), value: $cursorSmoothing, range: 0...2, step: 0.01)
         case .camera:
-            InspectorSwitch(title: "Facecam", isOn: .constant(recordingSession?.facecamVideoPath != nil))
+            InspectorSwitch(title: "Facecam", isOn: .constant(recordingSession?.facecamVideoPath != nil), isInteractive: false)
             InspectorSlider(title: "Facecam Size", valueText: "24%", value: .constant(24), range: 12...40, step: 1)
             InspectorSlider(title: "Border Width", valueText: "4px", value: .constant(4), range: 0...16, step: 1)
             if let path = recordingSession?.facecamVideoPath {
@@ -3554,7 +3891,7 @@ private struct SettingsInspector: View {
             }
             PositionGrid()
         case .audio:
-            InspectorSwitch(title: "Mute Preview", isOn: .constant(false))
+            InspectorSwitch(title: "Mute Preview", isOn: .constant(false), isInteractive: false)
             InspectorSlider(title: "Volume", valueText: "100%", value: .constant(1), range: 0...1, step: 0.01)
             if let sourceName = recordingSession?.sourceName {
                 SessionAssetRow(title: "Source", path: sourceName)
@@ -3589,7 +3926,7 @@ private struct InspectorRailButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        StudioButton(hitTarget: .rounded(9), help: tab.title, action: action) {
             Image(systemName: tab.symbolName)
                 .font(.system(size: 15, weight: .semibold))
                 .frame(width: 40, height: 40)
@@ -3600,8 +3937,6 @@ private struct InspectorRailButton: View {
                         .stroke(isActive ? Color.brand.opacity(0.24) : Color.clear, lineWidth: 1)
                 }
         }
-        .buttonStyle(.plain)
-        .help(tab.title)
     }
 }
 
@@ -3611,7 +3946,7 @@ private struct InspectorFooterButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        StudioButton(hitTarget: .rounded(7), action: action) {
             Label(title, systemImage: symbolName)
                 .font(.system(size: 10, weight: .medium))
                 .frame(maxWidth: .infinity)
@@ -3619,7 +3954,6 @@ private struct InspectorFooterButton: View {
                 .foregroundStyle(.secondary)
                 .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -3717,6 +4051,7 @@ private struct InspectorSlider: View {
 private struct InspectorSwitch: View {
     var title: String
     @Binding var isOn: Bool
+    var isInteractive = true
 
     var body: some View {
         HStack {
@@ -3727,12 +4062,18 @@ private struct InspectorSwitch: View {
             Toggle("", isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .allowsHitTesting(!isInteractive)
         }
         .padding(10)
         .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.white.opacity(0.05))
+        }
+        .rectangularHitTarget()
+        .onTapGesture {
+            guard isInteractive else { return }
+            isOn.toggle()
         }
     }
 }
@@ -3810,7 +4151,7 @@ private struct ProjectsStudioView: View {
 
                     Spacer()
 
-                    Button {
+                    StudioButton(hitTarget: .rounded(7)) {
                         model.refreshBackendState()
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
@@ -3820,7 +4161,6 @@ private struct ProjectsStudioView: View {
                             .background(Color.brand, in: RoundedRectangle(cornerRadius: 7))
                             .foregroundStyle(.white)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 HStack(spacing: 16) {
@@ -3892,7 +4232,7 @@ private struct ProjectActionCard: View {
             Text(description)
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
-            Button(action: action) {
+            StudioButton(hitTarget: .rounded(8), action: action) {
                 Label(title == "Open project" ? "Choose file" : "Browse recordings", systemImage: symbolName)
                     .font(.system(size: 13, weight: .semibold))
                     .frame(maxWidth: .infinity)
@@ -3900,7 +4240,6 @@ private struct ProjectActionCard: View {
                     .background(title == "Open project" ? Color.brand : Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
                     .foregroundStyle(title == "Open project" ? Color.white : Color.primary)
             }
-            .buttonStyle(.plain)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3917,7 +4256,7 @@ private struct ProjectListRow: View {
     var project: ProjectSummary
 
     var body: some View {
-        Button {
+        StudioButton(hitTarget: .rectangle) {
             if !project.missing {
                 model.openProject(project)
             }
@@ -3970,9 +4309,7 @@ private struct ProjectListRow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .opacity(project.missing ? 0.55 : 1)
     }
 }
@@ -4011,7 +4348,7 @@ private struct SettingsStudioView: View {
                 SettingsSection(title: "Service") {
                     SettingsRow(title: "Status", value: model.serviceHealth.map { "\($0.service) \($0.version)" } ?? "Unavailable")
                     SettingsRow(title: "Platform", value: model.serviceHealth?.platform ?? "macOS")
-                    Button {
+                    StudioButton(hitTarget: .rounded(8)) {
                         model.refreshBackendState()
                     } label: {
                         Label("Check Service", systemImage: "bolt.horizontal")
@@ -4019,7 +4356,6 @@ private struct SettingsStudioView: View {
                             .padding(.horizontal, 12)
                             .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
                     }
-                    .buttonStyle(.plain)
                 }
 
                 SettingsSection(title: "Folders") {
@@ -4029,7 +4365,7 @@ private struct SettingsStudioView: View {
                 }
 
                 SettingsSection(title: "Permissions") {
-                    Button {
+                    StudioButton(hitTarget: .rounded(8)) {
                         model.openPrivacySettings()
                     } label: {
                         Label("Open Screen Recording Privacy", systemImage: "lock.shield")
@@ -4038,7 +4374,6 @@ private struct SettingsStudioView: View {
                             .background(Color.brand, in: RoundedRectangle(cornerRadius: 8))
                             .foregroundStyle(.white)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -4100,14 +4435,13 @@ private struct FolderRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             if let path {
-                Button {
+                StudioButton(hitTarget: .rounded(7)) {
                     model.openPath(path)
                 } label: {
                     Image(systemName: "folder")
                         .frame(width: 28, height: 28)
                         .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 7))
                 }
-                .buttonStyle(.plain)
             }
         }
         .font(.system(size: 13))
@@ -4136,4 +4470,7 @@ private extension Color {
     static let studioCard = Color(red: 0.10, green: 0.10, blue: 0.12)
     static let studioControl = Color(red: 0.12, green: 0.12, blue: 0.145)
     static let studioBorder = Color.white.opacity(0.10)
+    static let timelineClip = Color(red: 0.68, green: 0.40, blue: 0.02)
+    static let timelineClipBorder = Color(red: 0.92, green: 0.56, blue: 0.06).opacity(0.52)
+    static let timelineHandle = Color(red: 1.0, green: 0.68, blue: 0.05)
 }

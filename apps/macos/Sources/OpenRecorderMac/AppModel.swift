@@ -35,6 +35,7 @@ final class AppModel: ObservableObject {
     private var activeScreenStartedAt: Date?
     private var activeFacecamStartedAt: Date?
     private var activeFacecamURL: URL?
+    private var displayFlashWindows: [NSWindow] = []
 
     let service = RustServiceClient()
     let capture = CaptureController()
@@ -620,6 +621,7 @@ final class AppModel: ObservableObject {
             backing: .buffered,
             defer: false
         )
+        window.isReleasedWhenClosed = false
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
@@ -627,10 +629,12 @@ final class AppModel: ObservableObject {
         window.level = .screenSaver
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.contentView = NSHostingView(rootView: DisplayFlashOverlay())
+        displayFlashWindows.append(window)
         window.orderFrontRegardless()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self, window] in
             window.close()
+            self?.displayFlashWindows.removeAll { $0 === window }
         }
     }
 }
