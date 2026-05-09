@@ -90,6 +90,41 @@ final class TimelineEditingPlanTests: XCTestCase {
         XCTAssertTrue(plan.segments.contains { $0.sourceStart == 4 && $0.sourceEnd == 6 && $0.speed == 2 })
     }
 
+    func testExportPlanIncludesClipSplitBoundaries() {
+        let edits = TimelineEditSnapshot(clipSplitTimes: [2])
+
+        let plan = TimelineExportEditPlan.build(duration: 5, edits: edits)
+
+        XCTAssertEqual(plan.segments.count, 2)
+        XCTAssertEqual(plan.segments[0].sourceStart, 0, accuracy: 0.001)
+        XCTAssertEqual(plan.segments[0].sourceEnd, 2, accuracy: 0.001)
+        XCTAssertEqual(plan.segments[1].sourceStart, 2, accuracy: 0.001)
+        XCTAssertEqual(plan.segments[1].sourceEnd, 5, accuracy: 0.001)
+        XCTAssertEqual(plan.outputDuration, 5, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testClipSplitUsesPlayheadAndDeduplicatesNearbySplits() {
+        let edits = TimelineEditController()
+
+        edits.addClipSplit(at: 3, duration: 10)
+        edits.addClipSplit(at: 3.01, duration: 10)
+
+        XCTAssertEqual(edits.clipSplitTimes.count, 1)
+        XCTAssertEqual(edits.clipSplitTimes[0], 3, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testAddedRegionStartsAtPlayheadWhenNearClipEnd() {
+        let edits = TimelineEditController()
+
+        edits.add(.zoom, at: 9.8, duration: 10)
+
+        let span = edits.zoomRegions.first?.span
+        XCTAssertEqual(span?.start ?? -1, 9.8, accuracy: 0.001)
+        XCTAssertEqual(span?.end ?? -1, 10, accuracy: 0.001)
+    }
+
     func testSnapshotReturnsActiveRegions() {
         let zoom = TimelineZoomRegion(span: TimelineSpan(start: 1, end: 2), depth: 2.2)
         let speed = TimelineSpeedRegion(span: TimelineSpan(start: 3, end: 4), speed: 1.5)

@@ -112,5 +112,47 @@ struct VideoEditorStudioView: View {
             guard requestID != nil, videoURL != nil else { return }
             isExportDialogPresented = true
         }
+        .background {
+            StudioKeyDownMonitor { event in
+                handleEditorShortcut(event)
+            }
+            .frame(width: 0, height: 0)
+        }
+    }
+
+    private func handleEditorShortcut(_ event: NSEvent) -> Bool {
+        guard !isTextInputActive else { return false }
+        guard editorShortcutModifiersAreAllowed(event.modifierFlags) else { return false }
+
+        let key = (event.charactersIgnoringModifiers ?? event.characters ?? "").lowercased()
+        switch key {
+        case " ":
+            guard !event.isARepeat else { return true }
+            playback.togglePlayback()
+            return true
+        case "z":
+            guard !event.isARepeat else { return true }
+            timelineEdits.add(.zoom, at: playback.currentTime, duration: playback.duration)
+            return true
+        case "s":
+            guard !event.isARepeat else { return true }
+            timelineEdits.add(.speed, at: playback.currentTime, duration: playback.duration)
+            return true
+        case "t":
+            guard !event.isARepeat else { return true }
+            timelineEdits.addClipSplit(at: playback.currentTime, duration: playback.duration)
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var isTextInputActive: Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+        return responder is NSTextView || responder is NSTextField
+    }
+
+    private func editorShortcutModifiersAreAllowed(_ modifiers: NSEvent.ModifierFlags) -> Bool {
+        modifiers.intersection([.command, .control, .option]).isEmpty
     }
 }

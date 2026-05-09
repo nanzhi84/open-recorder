@@ -61,7 +61,7 @@ struct TimelinePanel: View {
 
             switch press.characters.lowercased() {
             case "z": edits.add(.zoom, at: playback.currentTime, duration: playback.duration); return .handled
-            case "t": edits.add(.trim, at: playback.currentTime, duration: playback.duration); return .handled
+            case "t": edits.addClipSplit(at: playback.currentTime, duration: playback.duration); return .handled
             case "a": edits.add(.annotation, at: playback.currentTime, duration: playback.duration); return .handled
             case "s": edits.add(.speed, at: playback.currentTime, duration: playback.duration); return .handled
             default: return .ignored
@@ -78,7 +78,7 @@ struct TimelineTrackContent: View {
     var body: some View {
         VStack(spacing: 0) {
             TimelineRuler(duration: playback.duration)
-            TimelineClipRow(videoURL: videoURL, duration: playback.duration, seek: playback.seek(to:))
+            TimelineClipRow(videoURL: videoURL, duration: playback.duration, splitTimes: edits.clipSplitTimes, seek: playback.seek(to:))
             TimelineLayerRow(kind: .zoom, duration: playback.duration, regions: edits.zoomRegions.map { TimelineRegionRenderData(id: $0.id, span: $0.span, label: "\(String(format: "%.1f", $0.depth))×") }, selectedID: edits.selectedKind == .zoom ? edits.selectedID : nil, edits: edits)
             TimelineLayerRow(kind: .trim, duration: playback.duration, regions: edits.trimRegions.map { TimelineRegionRenderData(id: $0.id, span: $0.span, label: "Cut") }, selectedID: edits.selectedKind == .trim ? edits.selectedID : nil, edits: edits)
             TimelineLayerRow(kind: .annotation, duration: playback.duration, regions: edits.annotationRegions.map { TimelineRegionRenderData(id: $0.id, span: $0.span, label: $0.text) }, selectedID: edits.selectedKind == .annotation ? edits.selectedID : nil, edits: edits)
@@ -215,6 +215,7 @@ struct TimelinePlayhead: View {
 struct TimelineClipRow: View {
     var videoURL: URL?
     var duration: Double
+    var splitTimes: [Double]
     var seek: (Double) -> Void
     @State private var waveformSamples = TimelineAudioWaveformLoader.quietSamples()
 
@@ -224,7 +225,14 @@ struct TimelineClipRow: View {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Rectangle().fill(Color(red: 0.095, green: 0.095, blue: 0.11))
-                    if videoURL != nil { clipBody } else { Text("No clip").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.secondary.opacity(0.64)).frame(maxWidth: .infinity, maxHeight: .infinity) }
+                    if videoURL != nil {
+                        clipSegments(width: proxy.size.width)
+                    } else {
+                        Text("No clip")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.secondary.opacity(0.64))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
                 .rectangularHitTarget()
                 .gesture(DragGesture(minimumDistance: 0).onChanged { value in seek(to: value.location.x, width: proxy.size.width) })
@@ -235,29 +243,52 @@ struct TimelineClipRow: View {
         .task(id: videoURL) { await loadWaveform() }
     }
 
-    private var clipBody: some View {
+    private func clipSegments(width: CGFloat) -> some View {
+        let segments = TimelineClipSegment.segments(duration: duration, splitTimes: splitTimes)
+        return ZStack(alignment: .leading) {
+            ForEach(segments) { segment in
+                let startX = x(for: segment.start, width: width)
+                let endX = x(for: segment.end, width: width)
+                let segmentWidth = max(20, endX - startX - (segments.count > 1 ? 3 : 0))
+                clipBody(segment: segment, width: segmentWidth)
+                    .frame(width: segmentWidth, height: TimelineMetrics.clipHeight)
+                    .position(x: startX + (endX - startX) / 2, y: TimelineMetrics.clipHeight / 2)
+            }
+        }
+    }
+
+    private func clipBody(segment: TimelineClipSegment, width: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color.timelineClip)
             .overlay { RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.timelineClipBorder, lineWidth: 1) }
             .overlay(alignment: .bottom) { TimelineWaveformPreview(samples: waveformSamples).frame(height: 23).padding(.horizontal, 14).padding(.bottom, 4).allowsHitTesting(false) }
             .overlay(alignment: .center) {
-                VStack(spacing: 2) {
-                    Label("Clip", systemImage: "rectangle.on.rectangle").font(.system(size: 10, weight: .semibold))
-                    Text("\(formatClipDuration(duration)) @ 1x").font(.system(size: 10, weight: .semibold, design: .monospaced))
+                if width > 82 {
+                    VStack(spacing: 2) {
+                        Label("Clip \(segment.index + 1)", systemImage: "rectangle.on.rectangle")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("\(formatClipDuration(segment.end - segment.start)) @ 1x")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    }
+                    .foregroundStyle(Color.white.opacity(0.86))
+                    .shadow(color: Color.black.opacity(0.28), radius: 4, y: 2)
+                    .allowsHitTesting(false)
                 }
-                .foregroundStyle(Color.white.opacity(0.86))
-                .shadow(color: Color.black.opacity(0.28), radius: 4, y: 2)
-                .allowsHitTesting(false)
             }
-            .overlay(alignment: .bottomLeading) { Text("0:00").font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Color.white.opacity(0.32)).padding(.leading, 9).padding(.bottom, 4) }
-            .overlay(alignment: .bottomTrailing) { Text(formatPlaybackTime(duration)).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Color.white.opacity(0.32)).padding(.trailing, 9).padding(.bottom, 4) }
+            .overlay(alignment: .bottomLeading) { Text(formatPlaybackTime(segment.start)).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Color.white.opacity(0.32)).padding(.leading, 9).padding(.bottom, 4) }
+            .overlay(alignment: .bottomTrailing) { Text(formatPlaybackTime(segment.end)).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Color.white.opacity(0.32)).padding(.trailing, 9).padding(.bottom, 4) }
             .padding(.vertical, 5)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 2)
     }
 
     private func seek(to x: CGFloat, width: CGFloat) {
         guard duration.isFinite, duration > 0, width > 0 else { return }
         seek(duration * Double(min(max(x / width, 0), 1)))
+    }
+
+    private func x(for time: Double, width: CGFloat) -> CGFloat {
+        guard duration.isFinite, duration > 0 else { return 0 }
+        return width * CGFloat(min(max(time / duration, 0), 1))
     }
 
     private func loadWaveform() async {
@@ -266,6 +297,37 @@ struct TimelineClipRow: View {
         let samples = await TimelineAudioWaveformLoader.loadSamples(from: videoURL)
         guard !Task.isCancelled else { return }
         waveformSamples = samples
+    }
+}
+
+struct TimelineClipSegment: Identifiable, Equatable {
+    var index: Int
+    var start: Double
+    var end: Double
+
+    var id: Int { index }
+
+    static func segments(duration: Double, splitTimes: [Double]) -> [TimelineClipSegment] {
+        guard duration.isFinite, duration > 0 else {
+            return [TimelineClipSegment(index: 0, start: 0, end: 0)]
+        }
+
+        let boundaries = ([0, duration] + splitTimes)
+            .map { min(max($0, 0), duration) }
+            .filter { $0.isFinite }
+            .sorted()
+
+        let uniqueBoundaries = boundaries.reduce(into: [Double]()) { result, boundary in
+            if result.last.map({ abs($0 - boundary) > 0.001 }) ?? true {
+                result.append(boundary)
+            }
+        }
+
+        return uniqueBoundaries.dropLast().enumerated().compactMap { index, start in
+            let end = uniqueBoundaries[index + 1]
+            guard end - start > 0.001 else { return nil }
+            return TimelineClipSegment(index: index, start: start, end: end)
+        }
     }
 }
 
@@ -336,7 +398,7 @@ struct TimelineLayerRow: View {
                 ZStack(alignment: .leading) {
                     Rectangle().fill(Color(red: 0.095, green: 0.095, blue: 0.11))
                     if regions.isEmpty {
-                        Text(kind.map { "Press \($0.title.first.map(String.init) ?? "") to add \($0.title.lowercased())" } ?? "Audio waveform shown in clip")
+                        Text(emptyMessage)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Color.secondary.opacity(0.64))
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -351,6 +413,21 @@ struct TimelineLayerRow: View {
             .frame(height: TimelineMetrics.layerHeight)
         }
         .overlay(alignment: .bottom) { Rectangle().fill(Color.studioBorder).frame(height: 1) }
+    }
+
+    private var emptyMessage: String {
+        switch kind {
+        case .zoom:
+            "Press Z to add zoom"
+        case .speed:
+            "Press S to add speed"
+        case .annotation:
+            "Use the toolbar to add annotations"
+        case .trim:
+            "Use the toolbar to add trim"
+        case nil:
+            "Audio waveform shown in clip"
+        }
     }
 }
 

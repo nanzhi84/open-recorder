@@ -86,11 +86,12 @@ struct TimelineEditSnapshot: Equatable {
     var trimRegions: [TimelineTrimRegion] = []
     var annotationRegions: [TimelineAnnotationRegion] = []
     var speedRegions: [TimelineSpeedRegion] = []
+    var clipSplitTimes: [Double] = []
 
     static let empty = TimelineEditSnapshot()
 
     var hasEdits: Bool {
-        !zoomRegions.isEmpty || !trimRegions.isEmpty || !annotationRegions.isEmpty || !speedRegions.isEmpty
+        !zoomRegions.isEmpty || !trimRegions.isEmpty || !annotationRegions.isEmpty || !speedRegions.isEmpty || !clipSplitTimes.isEmpty
     }
 
     func activeZoom(at time: Double) -> TimelineZoomRegion? {
@@ -116,16 +117,18 @@ final class TimelineEditController: ObservableObject {
     @Published var trimRegions: [TimelineTrimRegion] = []
     @Published var annotationRegions: [TimelineAnnotationRegion] = []
     @Published var speedRegions: [TimelineSpeedRegion] = []
+    @Published var clipSplitTimes: [Double] = []
     @Published var selectedKind: TimelineRegionKind?
     @Published var selectedID: TimelineRegionID?
-    @Published var statusMessage = "Add regions with toolbar buttons or Z/T/A/S. Drag regions or handles to adjust."
+    @Published var statusMessage = "Use toolbar buttons or shortcuts. Space plays, Z zooms, S changes speed, T splits."
 
     var snapshot: TimelineEditSnapshot {
         TimelineEditSnapshot(
             zoomRegions: zoomRegions,
             trimRegions: trimRegions,
             annotationRegions: annotationRegions,
-            speedRegions: speedRegions
+            speedRegions: speedRegions,
+            clipSplitTimes: clipSplitTimes
         )
     }
 
@@ -134,6 +137,7 @@ final class TimelineEditController: ObservableObject {
         trimRegions.removeAll()
         annotationRegions.removeAll()
         speedRegions.removeAll()
+        clipSplitTimes.removeAll()
         selectedKind = nil
         selectedID = nil
         statusMessage = "Timeline edits reset."
@@ -146,8 +150,8 @@ final class TimelineEditController: ObservableObject {
         }
 
         let defaultDuration = min(1.0, duration)
-        let start = min(max(currentTime, 0), max(0, duration - defaultDuration))
-        let span = TimelineSpan(start: start, end: start + defaultDuration).normalized(duration: duration)
+        let start = min(max(currentTime, 0), duration)
+        let span = TimelineSpan(start: start, end: min(start + defaultDuration, duration)).normalized(duration: duration)
 
         switch kind {
         case .zoom:
@@ -180,6 +184,30 @@ final class TimelineEditController: ObservableObject {
             select(.speed, id: region.id)
         }
         statusMessage = "Added \(kind.title.lowercased()) at \(formatPlaybackTime(span.start))."
+    }
+
+    func addClipSplit(at currentTime: Double, duration: Double) {
+        guard duration.isFinite, duration > 0 else {
+            statusMessage = "Open a video before splitting the clip."
+            return
+        }
+
+        let minimumDistance = min(0.05, duration / 4)
+        let splitTime = min(max(currentTime, 0), duration)
+        guard splitTime > minimumDistance, splitTime < duration - minimumDistance else {
+            statusMessage = "Move the playhead inside the clip before splitting."
+            return
+        }
+
+        guard !clipSplitTimes.contains(where: { abs($0 - splitTime) < minimumDistance }) else {
+            statusMessage = "There is already a split at \(formatPlaybackTime(splitTime))."
+            return
+        }
+
+        clipSplitTimes.append(splitTime)
+        clipSplitTimes.sort()
+        select(nil, id: nil)
+        statusMessage = "Split clip at \(formatPlaybackTime(splitTime))."
     }
 
     func select(_ kind: TimelineRegionKind?, id: TimelineRegionID?) {
@@ -262,6 +290,7 @@ struct TimelineExportEditPlan: Equatable {
         boundaries.append(contentsOf: edits.speedRegions.flatMap { [$0.span.start, $0.span.end] })
         boundaries.append(contentsOf: edits.zoomRegions.flatMap { [$0.span.start, $0.span.end] })
         boundaries.append(contentsOf: edits.annotationRegions.flatMap { [$0.span.start, $0.span.end] })
+        boundaries.append(contentsOf: edits.clipSplitTimes)
 
         let sorted = Set(boundaries.map { min(max($0, 0.0), duration) }).sorted()
         var outputCursor = 0.0

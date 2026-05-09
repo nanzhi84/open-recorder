@@ -155,6 +155,63 @@ struct StudioMenu<Label: View, Content: View>: View {
     }
 }
 
+struct StudioKeyDownMonitor: NSViewRepresentable {
+    var isEnabled = true
+    var handler: (NSEvent) -> Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(handler: handler)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.view = view
+        context.coordinator.handler = handler
+        context.coordinator.isEnabled = isEnabled
+        context.coordinator.install()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.view = nsView
+        context.coordinator.handler = handler
+        context.coordinator.isEnabled = isEnabled
+        context.coordinator.install()
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.uninstall()
+    }
+
+    final class Coordinator {
+        weak var view: NSView?
+        var handler: (NSEvent) -> Bool
+        var isEnabled = true
+        private var monitor: Any?
+
+        init(handler: @escaping (NSEvent) -> Bool) {
+            self.handler = handler
+        }
+
+        func install() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.isEnabled else {
+                    return event
+                }
+                return self.handler(event) ? nil : event
+            }
+        }
+
+        func uninstall() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+            }
+            monitor = nil
+        }
+    }
+}
+
 
 struct HUDSurface<Content: View>: View {
     var isRecording = false
