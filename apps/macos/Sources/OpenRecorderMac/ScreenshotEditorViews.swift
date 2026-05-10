@@ -7,41 +7,37 @@ import UniformTypeIdentifiers
 struct ScreenshotEditorStudioView: View {
     @EnvironmentObject private var model: AppModel
     var screenshotURL: URL?
-    @State private var background: BackgroundStyle = BackgroundPresets.default
-    @State private var padding = 56.0
-    @State private var backgroundRoundness = 28.0
-    @State private var backgroundShadow = 0.0
-    @State private var imageRoundness = 10.0
-    @State private var imageShadow = 0.45
+    @ObservedObject var editor: ScreenshotEditorController
     @State private var isExportDialogPresented = false
-    @AppStorage("editor.screenshot.sidebarWidth") private var sidebarWidth = 320.0
+    private let sidebarWidth: CGFloat = 320
 
     var body: some View {
         StudioSplitPane(
             axis: .horizontal,
-            secondarySize: $sidebarWidth,
+            secondarySize: sidebarWidth,
             minPrimarySize: 520,
             minSecondarySize: 280,
             maxSecondarySize: 440
         ) {
             ScreenshotCanvas(
                 image: image,
-                background: background,
-                padding: padding,
-                backgroundRoundness: backgroundRoundness,
-                backgroundShadow: backgroundShadow,
-                imageRoundness: imageRoundness,
-                imageShadow: imageShadow
+                background: editor.state.background,
+                padding: editor.state.padding,
+                backgroundRoundness: editor.state.backgroundRoundness,
+                backgroundShadow: editor.state.backgroundShadow,
+                imageRoundness: editor.state.imageRoundness,
+                imageShadow: editor.state.imageShadow
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } secondary: {
             ScreenshotSettingsPanel(
-                background: $background,
-                padding: $padding,
-                backgroundRoundness: $backgroundRoundness,
-                backgroundShadow: $backgroundShadow,
-                imageRoundness: $imageRoundness,
-                imageShadow: $imageShadow,
+                background: editor.binding(for: \.background),
+                padding: editor.binding(for: \.padding),
+                backgroundRoundness: editor.binding(for: \.backgroundRoundness),
+                backgroundShadow: editor.binding(for: \.backgroundShadow),
+                imageRoundness: editor.binding(for: \.imageRoundness),
+                imageShadow: editor.binding(for: \.imageShadow),
+                onEditingChanged: handleUndoTransaction,
                 onExport: {
                     isExportDialogPresented = true
                 }
@@ -60,6 +56,9 @@ struct ScreenshotEditorStudioView: View {
         .onChange(of: model.screenshotExportRequestID) { _, requestID in
             guard requestID != nil, screenshotURL != nil else { return }
             isExportDialogPresented = true
+        }
+        .onChange(of: screenshotURL) { _, _ in
+            editor.resetHistory()
         }
     }
 
@@ -113,14 +112,22 @@ struct ScreenshotEditorStudioView: View {
     private func renderComposedPNG() -> Data? {
         guard let image else { return nil }
         let renderer = ScreenshotExportRenderer(configuration: ScreenshotExportConfiguration(
-            background: background,
-            padding: padding,
-            backgroundRoundness: backgroundRoundness,
-            backgroundShadow: backgroundShadow,
-            imageRoundness: imageRoundness,
-            imageShadow: imageShadow
+            background: editor.state.background,
+            padding: editor.state.padding,
+            backgroundRoundness: editor.state.backgroundRoundness,
+            backgroundShadow: editor.state.backgroundShadow,
+            imageRoundness: editor.state.imageRoundness,
+            imageShadow: editor.state.imageShadow
         ))
         return renderer.renderPNG(from: image)
+    }
+
+    private func handleUndoTransaction(_ isEditing: Bool) {
+        if isEditing {
+            editor.beginUndoTransaction()
+        } else {
+            editor.endUndoTransaction()
+        }
     }
 }
 
@@ -206,13 +213,7 @@ struct ScreenshotCanvas: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.studioPanel.opacity(0.86), in: RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.studioBorder)
-        }
-        .shadow(color: Color.black.opacity(0.20), radius: 22, y: 14)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .studioEditorPaneChrome()
     }
 
     private func screenshotStage(_ image: NSImage) -> some View {
@@ -251,6 +252,7 @@ struct ScreenshotSettingsPanel: View {
     @Binding var backgroundShadow: Double
     @Binding var imageRoundness: Double
     @Binding var imageShadow: Double
+    var onEditingChanged: (Bool) -> Void = { _ in }
     var onExport: () -> Void
 
     var body: some View {
@@ -260,13 +262,13 @@ struct ScreenshotSettingsPanel: View {
                     header
                     BackgroundPickerView(selection: $background)
                     InspectorGroup(title: "Background Layer", symbolName: "rectangle.fill") {
-                        InspectorSlider(title: "Padding", valueText: "\(Int(padding))px", value: $padding, range: 0...140, step: 1)
-                        InspectorSlider(title: "Roundness", valueText: "\(Int(backgroundRoundness))px", value: $backgroundRoundness, range: 0...64, step: 1)
-                        InspectorSlider(title: "Shadow", valueText: "\(Int(backgroundShadow * 100))%", value: $backgroundShadow, range: 0...1, step: 0.01)
+                        InspectorSlider(title: "Padding", valueText: "\(Int(padding))px", value: $padding, range: 0...140, step: 1, onEditingChanged: onEditingChanged)
+                        InspectorSlider(title: "Roundness", valueText: "\(Int(backgroundRoundness))px", value: $backgroundRoundness, range: 0...64, step: 1, onEditingChanged: onEditingChanged)
+                        InspectorSlider(title: "Shadow", valueText: "\(Int(backgroundShadow * 100))%", value: $backgroundShadow, range: 0...1, step: 0.01, onEditingChanged: onEditingChanged)
                     }
                     InspectorGroup(title: "Image Layer", symbolName: "photo") {
-                        InspectorSlider(title: "Roundness", valueText: "\(Int(imageRoundness))px", value: $imageRoundness, range: 0...48, step: 1)
-                        InspectorSlider(title: "Shadow", valueText: "\(Int(imageShadow * 100))%", value: $imageShadow, range: 0...1, step: 0.01)
+                        InspectorSlider(title: "Roundness", valueText: "\(Int(imageRoundness))px", value: $imageRoundness, range: 0...48, step: 1, onEditingChanged: onEditingChanged)
+                        InspectorSlider(title: "Shadow", valueText: "\(Int(imageShadow * 100))%", value: $imageShadow, range: 0...1, step: 0.01, onEditingChanged: onEditingChanged)
                     }
                 }
                 .padding(14)
@@ -289,12 +291,7 @@ struct ScreenshotSettingsPanel: View {
             .padding(12)
             .background(Color.white.opacity(0.025))
         }
-        .background(Color.studioPanel.opacity(0.86), in: RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.studioBorder)
-        }
-        .shadow(color: Color.black.opacity(0.18), radius: 18, y: 12)
+        .studioEditorPaneChrome()
     }
 
     private var header: some View {

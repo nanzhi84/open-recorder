@@ -2,11 +2,11 @@ import SwiftUI
 
 struct ElasticSlider: View {
     @Environment(\.isEnabled) private var isEnabled
-    @FocusState private var isFocused: Bool
 
     @Binding var value: Double
     var range: ClosedRange<Double>
     var step: Double
+    var onEditingChanged: (Bool) -> Void = { _ in }
 
     @State private var visualProgress: Double?
     @State private var dragStartValue: Double = 0
@@ -56,17 +56,9 @@ struct ElasticSlider: View {
                         Capsule()
                             .stroke(Color.white.opacity(0.10), lineWidth: 1)
                     }
-                    .overlay {
-                        if isFocused {
-                            Capsule()
-                                .stroke(Color(red: 0.145, green: 0.388, blue: 0.922).opacity(0.48), lineWidth: 3)
-                                .blur(radius: 0.5)
-                        }
-                    }
                     .frame(height: trackHeight)
                     .scaleEffect(x: scaleX, y: scaleY)
                     .offset(x: offsetX)
-                    .animation(.easeOut(duration: 0.15), value: isFocused)
                     .animation(.easeOut(duration: 0.15), value: isEnabled)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -76,7 +68,7 @@ struct ElasticSlider: View {
         .frame(height: hitHeight)
         .opacity(isEnabled ? 1 : 0.5)
         .focusable(isEnabled)
-        .focused($isFocused)
+        .focusEffectDisabled()
         .onMoveCommand(perform: handleMoveCommand)
         .accessibilityRepresentation {
             Slider(value: $value, in: range, step: step)
@@ -97,6 +89,7 @@ struct ElasticSlider: View {
                 if !isDragging {
                     isDragging = true
                     dragStartValue = value
+                    onEditingChanged(true)
                 }
 
                 let nextProgress = normalized(dragStartValue) + Double(gesture.translation.width / width)
@@ -106,6 +99,7 @@ struct ElasticSlider: View {
             .onEnded { _ in
                 guard isEnabled else { return }
                 isDragging = false
+                onEditingChanged(false)
 
                 let settledProgress = (visualProgress ?? normalized(value)).clamped(to: 0...1)
                 withAnimation(.interpolatingSpring(stiffness: 260, damping: 34)) {

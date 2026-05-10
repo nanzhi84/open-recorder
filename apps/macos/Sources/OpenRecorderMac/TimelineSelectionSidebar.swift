@@ -21,12 +21,7 @@ struct TimelineSelectionSidebar: View {
 
             selectionFooter
         }
-        .background(Color.studioPanel.opacity(0.86), in: RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.studioBorder)
-        }
-        .shadow(color: Color.black.opacity(0.18), radius: 18, y: 12)
+        .studioEditorPaneChrome()
     }
 
     private var selectionHeader: some View {
@@ -89,6 +84,11 @@ struct TimelineSelectionSidebar: View {
             TimelineSelectionInfoRow(title: "Start", value: formatPlaybackTime(clip.start))
             TimelineSelectionInfoRow(title: "End", value: formatPlaybackTime(clip.end))
             TimelineSelectionInfoRow(title: "Duration", value: formatClipDuration(clip.end - clip.start))
+            TimelineSelectionInfoRow(title: "Speed", value: TimelineClipSpeed.label(clip.speed))
+        }
+
+        InspectorGroup(title: "Speed", symbolName: "speedometer") {
+            TimelineClipSpeedPicker(speed: clipSpeedBinding(index: clip.index))
         }
 
         InspectorGroup(title: "Split", symbolName: "timeline.selection") {
@@ -98,13 +98,13 @@ struct TimelineSelectionSidebar: View {
 
             if clip.start > 0.001 {
                 TimelineSelectionActionButton(title: "Merge Previous", symbolName: "arrow.left.to.line") {
-                    edits.removeClipSplit(at: clip.start)
+                    edits.removeClipSplit(at: clip.start, duration: playback.duration)
                 }
             }
 
             if playback.duration - clip.end > 0.001 {
                 TimelineSelectionActionButton(title: "Merge Next", symbolName: "arrow.right.to.line") {
-                    edits.removeClipSplit(at: clip.end)
+                    edits.removeClipSplit(at: clip.end, duration: playback.duration)
                 }
             }
         }
@@ -124,44 +124,43 @@ struct TimelineSelectionSidebar: View {
         case .zoom:
             if let zoom = edits.zoomRegions.first(where: { $0.id == id }) {
                 InspectorGroup(title: "Zoom", symbolName: "plus.magnifyingglass") {
+                    TimelineSelectionInfoRow(title: "Type", value: zoom.mode == .auto ? "Auto" : "Manual")
                     InspectorSlider(
                         title: "Depth",
                         valueText: String(format: "%.2fx", zoom.depth),
                         value: zoomDepthBinding(id: id),
                         range: 1.0...5.0,
-                        step: 0.05
+                        step: 0.05,
+                        onEditingChanged: handleUndoTransaction
                     )
                     TimelineSelectionActionButton(title: "Cycle Depth", symbolName: "arrow.triangle.2.circlepath") {
                         edits.deepenZoom(id: id)
                     }
                 }
-            } else {
-                unavailableSelection
-            }
-        case .trim:
-            InspectorGroup(title: "Trim", symbolName: "scissors") {
-                Text("This range is removed during preview and export.")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        case .speed:
-            if let speed = edits.speedRegions.first(where: { $0.id == id }) {
-                InspectorGroup(title: "Speed", symbolName: "speedometer") {
+
+                InspectorGroup(title: "Focus", symbolName: "scope") {
                     InspectorSlider(
-                        title: "Rate",
-                        valueText: String(format: "%.2gx", speed.speed),
-                        value: speedBinding(id: id),
-                        range: 0.25...2.0,
-                        step: 0.25
+                        title: "X",
+                        valueText: focusValueText(zoom.focusX),
+                        value: zoomFocusXBinding(id: id),
+                        range: 0...1,
+                        step: 0.01,
+                        onEditingChanged: handleUndoTransaction
                     )
-                    TimelineSelectionActionButton(title: "Cycle Speed", symbolName: "arrow.triangle.2.circlepath") {
-                        edits.cycleSpeed(id: id)
-                    }
+                    InspectorSlider(
+                        title: "Y",
+                        valueText: focusValueText(zoom.focusY),
+                        value: zoomFocusYBinding(id: id),
+                        range: 0...1,
+                        step: 0.01,
+                        onEditingChanged: handleUndoTransaction
+                    )
                 }
             } else {
                 unavailableSelection
             }
+        case .trim:
+            unavailableSelection
         case .annotation:
             InspectorGroup(title: "Annotation", symbolName: "text.bubble") {
                 TextField("Annotation text", text: annotationTextBinding(id: id))
@@ -191,7 +190,7 @@ struct TimelineSelectionSidebar: View {
 
     private var selectionSubtitle: String {
         if let clip = edits.selectedClip(duration: playback.duration) {
-            return "\(formatPlaybackTime(clip.start)) - \(formatPlaybackTime(clip.end))"
+            return "\(formatPlaybackTime(clip.start)) - \(formatPlaybackTime(clip.end)) @ \(TimelineClipSpeed.label(clip.speed))"
         }
         if let kind = edits.selectedKind, let id = edits.selectedID, let span = selectedRegionSpan(kind: kind, id: id) {
             return "\(formatPlaybackTime(span.start)) - \(formatPlaybackTime(span.end))"
@@ -216,8 +215,6 @@ struct TimelineSelectionSidebar: View {
             return "plus.magnifyingglass"
         case .trim:
             return "scissors"
-        case .speed:
-            return "speedometer"
         case .annotation:
             return "text.bubble"
         case nil:
@@ -233,8 +230,6 @@ struct TimelineSelectionSidebar: View {
             edits.trimRegions.first { $0.id == id }?.span
         case .annotation:
             edits.annotationRegions.first { $0.id == id }?.span
-        case .speed:
-            edits.speedRegions.first { $0.id == id }?.span
         }
     }
 
@@ -245,10 +240,24 @@ struct TimelineSelectionSidebar: View {
         )
     }
 
-    private func speedBinding(id: TimelineRegionID) -> Binding<Double> {
+    private func zoomFocusXBinding(id: TimelineRegionID) -> Binding<Double> {
         Binding(
-            get: { edits.speedRegions.first(where: { $0.id == id })?.speed ?? 1 },
-            set: { edits.updateSpeed(id: id, speed: $0) }
+            get: { edits.zoomRegions.first(where: { $0.id == id })?.focusX ?? 0.5 },
+            set: { edits.updateZoomFocus(id: id, focusX: $0) }
+        )
+    }
+
+    private func zoomFocusYBinding(id: TimelineRegionID) -> Binding<Double> {
+        Binding(
+            get: { edits.zoomRegions.first(where: { $0.id == id })?.focusY ?? 0.5 },
+            set: { edits.updateZoomFocus(id: id, focusY: $0) }
+        )
+    }
+
+    private func clipSpeedBinding(index: Int) -> Binding<Double> {
+        Binding(
+            get: { edits.clipSpeed(index: index) },
+            set: { edits.updateClipSpeed(index: index, speed: $0) }
         )
     }
 
@@ -257,6 +266,18 @@ struct TimelineSelectionSidebar: View {
             get: { edits.annotationRegions.first(where: { $0.id == id })?.text ?? "" },
             set: { edits.updateAnnotationText(id: id, text: $0) }
         )
+    }
+
+    private func handleUndoTransaction(_ isEditing: Bool) {
+        if isEditing {
+            edits.beginUndoTransaction()
+        } else {
+            edits.endUndoTransaction()
+        }
+    }
+
+    private func focusValueText(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
     }
 }
 
@@ -301,6 +322,35 @@ private struct TimelineSelectionActionButton: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(isDestructive ? Color.red.opacity(0.18) : Color.white.opacity(0.05))
                 }
+        }
+    }
+}
+
+private struct TimelineClipSpeedPicker: View {
+    @Binding var speed: Double
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(TimelineClipSpeed.values, id: \.self) { value in
+                let isSelected = TimelineClipSpeed.normalized(speed) == value
+                StudioButton(hitTarget: .rounded(7)) {
+                    speed = value
+                } label: {
+                    Text(TimelineClipSpeed.label(value))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 30)
+                        .foregroundStyle(isSelected ? Color.timelineClipForeground : Color.secondary)
+                        .background(isSelected ? Color.timelineHandle.opacity(0.92) : Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 7))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 7)
+                                .stroke(isSelected ? Color.timelineClipBorder : Color.white.opacity(0.05), lineWidth: isSelected ? 1.5 : 1)
+                        }
+                }
+                .help("Set clip speed to \(TimelineClipSpeed.label(value))")
+                .accessibilityLabel("Set clip speed to \(TimelineClipSpeed.label(value))")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 enum OnboardingWindowMetrics {
@@ -8,6 +9,7 @@ enum OnboardingWindowMetrics {
 
 struct OnboardingView: View {
     @EnvironmentObject private var model: AppModel
+    private let permissionRefreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,6 +85,9 @@ struct OnboardingView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.refreshOnboardingPermissionStates()
         }
+        .onReceive(permissionRefreshTimer) { _ in
+            model.refreshOnboardingPermissionStates()
+        }
     }
 
     private var screenRecordingButtonTitle: String {
@@ -132,18 +137,26 @@ struct OnboardingView: View {
 
 private struct OnboardingMark: View {
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.brand.opacity(0.28), lineWidth: 8)
-                .frame(width: 58, height: 58)
-            Circle()
-                .stroke(Color.brand, lineWidth: 6)
-                .frame(width: 46, height: 46)
-            Circle()
-                .fill(Color.studioBackground)
-                .frame(width: 30, height: 30)
+        Image(nsImage: OpenRecorderAppIcon.image)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 72, height: 72)
+            .shadow(color: Color.black.opacity(0.30), radius: 18, y: 10)
+            .accessibilityHidden(true)
+    }
+}
+
+private enum OpenRecorderAppIcon {
+    @MainActor
+    static var image: NSImage {
+        if let bundledIcon = Bundle.main
+            .url(forResource: "AppIcon", withExtension: "icns")
+            .flatMap(NSImage.init(contentsOf:)) {
+            return bundledIcon
         }
-        .accessibilityHidden(true)
+
+        return NSApplication.shared.applicationIconImage
     }
 }
 

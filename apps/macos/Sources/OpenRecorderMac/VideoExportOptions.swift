@@ -8,6 +8,7 @@ enum VideoExportResolution: String, CaseIterable, Identifiable {
     case source
     case twoK
     case fourK
+    case custom
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum VideoExportResolution: String, CaseIterable, Identifiable {
         case .source: "Source"
         case .twoK: "2K"
         case .fourK: "4K"
+        case .custom: "Custom"
         }
     }
 
@@ -24,6 +26,7 @@ enum VideoExportResolution: String, CaseIterable, Identifiable {
         case .source: "Keep the recording dimensions."
         case .twoK: "Scale the long edge to 2560 px."
         case .fourK: "Scale the long edge to 3840 px."
+        case .custom: "Use the crop dialog size."
         }
     }
 
@@ -32,6 +35,7 @@ enum VideoExportResolution: String, CaseIterable, Identifiable {
         case .source: "source"
         case .twoK: "2k"
         case .fourK: "4k"
+        case .custom: "custom"
         }
     }
 
@@ -40,6 +44,7 @@ enum VideoExportResolution: String, CaseIterable, Identifiable {
         case .source: nil
         case .twoK: 2560
         case .fourK: 3840
+        case .custom: nil
         }
     }
 }
@@ -142,12 +147,20 @@ struct VideoExportOptions: Equatable {
     var format: VideoExportFormat
     var frameRate: VideoExportFrameRate
     var styling: VideoBackgroundStyling
+    var cropSelection: VideoCropSelection?
+    var customOutputSize: CGSize?
+    var cursorOverlay: CursorOverlaySettings = .hidden
+    var cursorTelemetryURL: URL? = nil
 
     static let `default` = VideoExportOptions(
         resolution: .source,
         format: .mov,
         frameRate: .source,
-        styling: .none
+        styling: .none,
+        cropSelection: nil,
+        customOutputSize: nil,
+        cursorOverlay: .hidden,
+        cursorTelemetryURL: nil
     )
 
     func with(
@@ -155,7 +168,11 @@ struct VideoExportOptions: Equatable {
         padding: Double,
         borderRadius: Double,
         shadow: Double,
-        backgroundBlur: Double
+        backgroundBlur: Double,
+        inset: Double,
+        insetColor: SerializableColor,
+        insetOpacity: Double,
+        insetBalance: VideoInsetBalance
     ) -> VideoExportOptions {
         var copy = self
         copy.styling = VideoBackgroundStyling(
@@ -163,8 +180,35 @@ struct VideoExportOptions: Equatable {
             paddingRatio: max(0, padding) / 100 * 0.2,
             borderRadiusRatio: max(0, borderRadius) / 100 * 0.4,
             shadowIntensity: max(0, min(shadow, 1)),
-            backgroundBlurRatio: max(0, backgroundBlur) / 100 * 0.5
+            backgroundBlurRatio: max(0, backgroundBlur) / 100 * 0.5,
+            inset: VideoInsetStyling(
+                amountRatio: VideoInsetGeometry.amountRatio(fromValue: inset.rounded()),
+                color: insetColor,
+                opacity: max(0, min(insetOpacity, 1)),
+                balance: insetBalance.clamped
+            )
         )
+        return copy
+    }
+
+    func withCropSelection(_ selection: VideoCropSelection) -> VideoExportOptions {
+        var copy = self
+        copy.cropSelection = selection.isPassthrough ? nil : selection
+        switch selection.sizing {
+        case .preset(let resolution):
+            copy.resolution = resolution
+            copy.customOutputSize = nil
+        case .custom(let width, let height):
+            copy.resolution = .custom
+            copy.customOutputSize = CGSize(width: width, height: height)
+        }
+        return copy
+    }
+
+    func withCursorOverlay(_ settings: CursorOverlaySettings, telemetryURL: URL?) -> VideoExportOptions {
+        var copy = self
+        copy.cursorOverlay = settings.clamped
+        copy.cursorTelemetryURL = telemetryURL
         return copy
     }
 }
@@ -252,7 +296,12 @@ enum VideoExportRenderer {
         let preferredTransform = try await videoTrack.load(.preferredTransform)
         let duration = try await asset.load(.duration)
         let frameDuration = try await options.frameRate.frameDuration(for: videoTrack)
-        let outputSize = outputSize(for: naturalSize.applying(preferredTransform), options: options)
+        let normalizedSourceSize = normalizedSize(for: naturalSize, preferredTransform: preferredTransform)
+        let cropRect = normalizedCropRect(for: options.cropSelection, sourceSize: normalizedSourceSize)
+        let outputSize = resolvedOutputSize(for: cropRect.size, options: options)
+        let cursorTrack = options.cursorTelemetryURL
+            .flatMap { try? CursorTelemetryPayload.load(from: $0) }
+            .map(CursorTelemetryTrack.init(payload:))
 
         let exportAsset = try await makeEditedAsset(from: asset, duration: duration, edits: edits)
 
@@ -267,12 +316,15 @@ enum VideoExportRenderer {
             for: exportAsset.videoTrack ?? videoTrack,
             sourceSize: naturalSize,
             preferredTransform: preferredTransform,
+            cropRect: cropRect,
             outputSize: outputSize,
             duration: CMTime(seconds: max(0.001, exportAsset.duration), preferredTimescale: 600),
             frameDuration: frameDuration,
             styling: options.styling,
             edits: edits,
-            editPlan: exportAsset.plan
+            editPlan: exportAsset.plan,
+            cursorTrack: cursorTrack,
+            cursorSettings: options.cursorOverlay
         )
 
         if Task.isCancelled {
@@ -312,7 +364,7 @@ enum VideoExportRenderer {
     private static func makeEditedAsset(from asset: AVAsset, duration: CMTime, edits: TimelineEditSnapshot) async throws -> EditedAsset {
         let sourceDuration = max(0, duration.seconds)
         let plan = TimelineExportEditPlan.build(duration: sourceDuration, edits: edits)
-        guard edits.trimRegions.isEmpty == false || edits.speedRegions.isEmpty == false else {
+        guard edits.trimRegions.isEmpty == false || edits.hasClipSpeedEdits else {
             return EditedAsset(asset: asset, videoTrack: nil, duration: sourceDuration, plan: plan)
         }
         guard plan.segments.isEmpty == false else {
@@ -356,9 +408,13 @@ enum VideoExportRenderer {
         )
     }
 
-    private static func outputSize(for transformedSize: CGSize, options: VideoExportOptions) -> CGSize {
-        let sourceWidth = max(abs(transformedSize.width), 2)
-        let sourceHeight = max(abs(transformedSize.height), 2)
+    static func resolvedOutputSize(for sourceSize: CGSize, options: VideoExportOptions) -> CGSize {
+        if options.resolution == .custom, let customOutputSize = options.customOutputSize {
+            return evenSize(width: customOutputSize.width, height: customOutputSize.height)
+        }
+
+        let sourceWidth = max(abs(sourceSize.width), 2)
+        let sourceHeight = max(abs(sourceSize.height), 2)
         guard let targetLongEdge = options.resolution.targetLongEdge else {
             return evenSize(width: sourceWidth, height: sourceHeight)
         }
@@ -369,33 +425,51 @@ enum VideoExportRenderer {
     }
 
     private static func evenSize(width: CGFloat, height: CGFloat) -> CGSize {
-        CGSize(
-            width: max(2, floor(width / 2) * 2),
-            height: max(2, floor(height / 2) * 2)
-        )
+        VideoCropGeometry.evenSize(CGSize(width: width, height: height))
+    }
+
+    static func normalizedSize(for naturalSize: CGSize, preferredTransform: CGAffineTransform) -> CGSize {
+        let naturalRect = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
+        return CGSize(width: max(abs(naturalRect.width), 2), height: max(abs(naturalRect.height), 2))
+    }
+
+    static func normalizedCropRect(for selection: VideoCropSelection?, sourceSize: CGSize) -> CGRect {
+        guard let selection else {
+            return CGRect(origin: .zero, size: VideoCropSelection.safeSourceSize(sourceSize))
+        }
+        return VideoCropSelection.clampedPixelRect(selection.pixelRect(in: sourceSize), in: sourceSize)
     }
 
     private static func makeVideoComposition(
         for videoTrack: AVAssetTrack,
         sourceSize: CGSize,
         preferredTransform: CGAffineTransform,
+        cropRect: CGRect,
         outputSize: CGSize,
         duration: CMTime,
         frameDuration: CMTime,
         styling: VideoBackgroundStyling,
         edits: TimelineEditSnapshot = .empty,
-        editPlan: TimelineExportEditPlan = TimelineExportEditPlan(segments: [], outputDuration: 0)
+        editPlan: TimelineExportEditPlan = TimelineExportEditPlan(segments: [], outputDuration: 0),
+        cursorTrack: CursorTelemetryTrack? = nil,
+        cursorSettings: CursorOverlaySettings = .hidden
     ) -> AVMutableVideoComposition {
         let naturalRect = CGRect(origin: .zero, size: sourceSize).applying(preferredTransform)
         let normalizedTransform = preferredTransform.translatedBy(x: -naturalRect.origin.x, y: -naturalRect.origin.y)
         let normalizedSize = CGSize(width: abs(naturalRect.width), height: abs(naturalRect.height))
-        let scale = min(outputSize.width / max(normalizedSize.width, 1), outputSize.height / max(normalizedSize.height, 1))
-        let scaledSize = CGSize(width: normalizedSize.width * scale, height: normalizedSize.height * scale)
+        let clampedCropRect = VideoCropSelection.clampedPixelRect(cropRect, in: normalizedSize)
+        let cropSize = clampedCropRect.size
+        let scale = min(outputSize.width / max(cropSize.width, 1), outputSize.height / max(cropSize.height, 1))
+        let scaledSize = CGSize(width: cropSize.width * scale, height: cropSize.height * scale)
         let translation = CGAffineTransform(
             translationX: (outputSize.width - scaledSize.width) / 2,
             y: (outputSize.height - scaledSize.height) / 2
         )
-        let transform = normalizedTransform.concatenating(CGAffineTransform(scaleX: scale, y: scale)).concatenating(translation)
+        let cropTranslation = CGAffineTransform(translationX: -clampedCropRect.minX, y: -clampedCropRect.minY)
+        let transform = normalizedTransform
+            .concatenating(cropTranslation)
+            .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+            .concatenating(translation)
 
         if styling.isPassthrough {
             let instruction = AVMutableVideoCompositionInstruction()
@@ -409,8 +483,22 @@ enum VideoExportRenderer {
             composition.renderSize = outputSize
             composition.frameDuration = frameDuration
             composition.instructions = [instruction]
-            if edits.annotationRegions.isEmpty == false {
-                composition.animationTool = makeAnnotationTool(outputSize: outputSize, edits: edits, editPlan: editPlan)
+            if needsOverlayTool(edits: edits, cursorTrack: cursorTrack, cursorSettings: cursorSettings) {
+                let contentRect = exportSourceContentRect(
+                    renderSize: outputSize,
+                    cropSize: clampedCropRect.size,
+                    styling: .none
+                )
+                composition.animationTool = makeOverlayTool(
+                    outputSize: outputSize,
+                    contentRect: contentRect,
+                    cropRect: clampedCropRect,
+                    sourceSize: normalizedSize,
+                    edits: edits,
+                    editPlan: editPlan,
+                    cursorTrack: cursorTrack,
+                    cursorSettings: cursorSettings
+                )
             }
             return composition
         }
@@ -421,6 +509,7 @@ enum VideoExportRenderer {
             styling: styling,
             preferredTransform: normalizedTransform,
             normalizedSize: normalizedSize,
+            cropRect: clampedCropRect,
             renderSize: outputSize,
             edits: edits,
             editPlan: editPlan
@@ -431,8 +520,22 @@ enum VideoExportRenderer {
         composition.renderSize = outputSize
         composition.frameDuration = frameDuration
         composition.instructions = [instruction]
-        if edits.annotationRegions.isEmpty == false {
-            composition.animationTool = makeAnnotationTool(outputSize: outputSize, edits: edits, editPlan: editPlan)
+        if needsOverlayTool(edits: edits, cursorTrack: cursorTrack, cursorSettings: cursorSettings) {
+            let contentRect = exportSourceContentRect(
+                renderSize: outputSize,
+                cropSize: clampedCropRect.size,
+                styling: styling
+            )
+            composition.animationTool = makeOverlayTool(
+                outputSize: outputSize,
+                contentRect: contentRect,
+                cropRect: clampedCropRect,
+                sourceSize: normalizedSize,
+                edits: edits,
+                editPlan: editPlan,
+                cursorTrack: cursorTrack,
+                cursorSettings: cursorSettings
+            )
         }
         return composition
     }
@@ -444,9 +547,37 @@ enum VideoExportRenderer {
             let end = editPlan.outputTime(forSourceTime: zoom.span.end) ?? zoom.span.end
             guard end > start else { continue }
             let zoomTransform = zoomedTransform(base: baseTransform, outputSize: outputSize, zoom: zoom)
-            let timeRange = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600), end: CMTime(seconds: end, preferredTimescale: 600))
-            layerInstruction.setTransform(zoomTransform, at: timeRange.start)
-            layerInstruction.setTransform(baseTransform, at: timeRange.end)
+            let duration = end - start
+            let rampIn = min(TimelineZoomAnimator.rampInSeconds, duration * 0.4)
+            let rampOut = min(TimelineZoomAnimator.rampOutSeconds, duration * 0.4)
+            let holdStart = start + rampIn
+            let holdEnd = max(holdStart, end - rampOut)
+
+            if rampIn > 0 {
+                layerInstruction.setTransformRamp(
+                    fromStart: baseTransform,
+                    toEnd: zoomTransform,
+                    timeRange: CMTimeRange(
+                        start: CMTime(seconds: start, preferredTimescale: 600),
+                        duration: CMTime(seconds: rampIn, preferredTimescale: 600)
+                    )
+                )
+            } else {
+                layerInstruction.setTransform(zoomTransform, at: CMTime(seconds: start, preferredTimescale: 600))
+            }
+
+            layerInstruction.setTransform(zoomTransform, at: CMTime(seconds: holdStart, preferredTimescale: 600))
+            if rampOut > 0 {
+                layerInstruction.setTransformRamp(
+                    fromStart: zoomTransform,
+                    toEnd: baseTransform,
+                    timeRange: CMTimeRange(
+                        start: CMTime(seconds: holdEnd, preferredTimescale: 600),
+                        duration: CMTime(seconds: max(0, end - holdEnd), preferredTimescale: 600)
+                    )
+                )
+            }
+            layerInstruction.setTransform(baseTransform, at: CMTime(seconds: end, preferredTimescale: 600))
         }
     }
 
@@ -459,7 +590,20 @@ enum VideoExportRenderer {
         return base.concatenating(translateBack).concatenating(zoomScale).concatenating(translateToFocus)
     }
 
-    private static func makeAnnotationTool(outputSize: CGSize, edits: TimelineEditSnapshot, editPlan: TimelineExportEditPlan) -> AVVideoCompositionCoreAnimationTool {
+    private static func needsOverlayTool(edits: TimelineEditSnapshot, cursorTrack: CursorTelemetryTrack?, cursorSettings: CursorOverlaySettings) -> Bool {
+        edits.annotationRegions.isEmpty == false || (cursorSettings.clamped.isVisible && cursorTrack?.samples.isEmpty == false)
+    }
+
+    private static func makeOverlayTool(
+        outputSize: CGSize,
+        contentRect: CGRect,
+        cropRect: CGRect,
+        sourceSize: CGSize,
+        edits: TimelineEditSnapshot,
+        editPlan: TimelineExportEditPlan,
+        cursorTrack: CursorTelemetryTrack?,
+        cursorSettings: CursorOverlaySettings
+    ) -> AVVideoCompositionCoreAnimationTool {
         let parentLayer = CALayer()
         parentLayer.frame = CGRect(origin: .zero, size: outputSize)
         let videoLayer = CALayer()
@@ -493,6 +637,208 @@ enum VideoExportRenderer {
             parentLayer.addSublayer(textLayer)
         }
 
+        if let cursorTrack, cursorSettings.clamped.isVisible {
+            let cursorLayer = makeCursorLayer(
+                outputSize: outputSize,
+                contentRect: contentRect,
+                cropRect: cropRect,
+                sourceSize: sourceSize,
+                edits: edits,
+                editPlan: editPlan,
+                track: cursorTrack,
+                settings: cursorSettings
+            )
+            parentLayer.addSublayer(cursorLayer)
+        }
+
         return AVVideoCompositionCoreAnimationTool(postProcessingAsVideoLayer: videoLayer, in: parentLayer)
+    }
+
+    private static func makeCursorLayer(
+        outputSize: CGSize,
+        contentRect: CGRect,
+        cropRect: CGRect,
+        sourceSize: CGSize,
+        edits: TimelineEditSnapshot,
+        editPlan: TimelineExportEditPlan,
+        track: CursorTelemetryTrack,
+        settings: CursorOverlaySettings
+    ) -> CALayer {
+        let resolvedSettings = settings.clamped
+        let baseSize = max(14, min(52, min(contentRect.width, contentRect.height) * 0.032))
+        let cursorSize = baseSize * resolvedSettings.size
+        let cursorLayer = CAShapeLayer()
+        cursorLayer.bounds = CGRect(x: 0, y: 0, width: cursorSize, height: cursorSize * 1.25)
+        cursorLayer.anchorPoint = CGPoint(x: 0, y: 1)
+        cursorLayer.path = cursorPath(size: cursorSize)
+        cursorLayer.fillColor = NSColor.white.cgColor
+        cursorLayer.strokeColor = NSColor.black.withAlphaComponent(0.82).cgColor
+        cursorLayer.lineWidth = max(1.5, cursorSize * 0.08)
+        cursorLayer.shadowColor = NSColor.black.cgColor
+        cursorLayer.shadowOpacity = 0.36
+        cursorLayer.shadowRadius = max(2, cursorSize * 0.18)
+        cursorLayer.shadowOffset = CGSize(width: 0, height: -cursorSize * 0.08)
+
+        let duration = max(0.001, editPlan.outputDuration)
+        let sampleCount = max(2, min(9_000, Int(ceil(duration * 30)) + 1))
+        var values: [CGPoint] = []
+        var keyTimes: [NSNumber] = []
+
+        for index in 0..<sampleCount {
+            let progress = sampleCount == 1 ? 0 : Double(index) / Double(sampleCount - 1)
+            let outputTime = duration * progress
+            let sourceTime = editPlan.sourceTime(forOutputTime: outputTime) ?? outputTime
+            guard let point = track.point(at: sourceTime, settings: resolvedSettings) else {
+                continue
+            }
+            let mapped = cursorOutputPoint(
+                telemetryPoint: point,
+                outputTime: outputTime,
+                outputSize: outputSize,
+                contentRect: contentRect,
+                cropRect: cropRect,
+                sourceSize: sourceSize,
+                edits: edits,
+                editPlan: editPlan,
+                track: track
+            )
+            values.append(mapped)
+            keyTimes.append(NSNumber(value: progress))
+        }
+
+        cursorLayer.position = values.first ?? CGPoint(x: contentRect.minX, y: contentRect.maxY)
+        if values.count > 1 {
+            let animation = CAKeyframeAnimation(keyPath: "position")
+            animation.values = values
+            animation.keyTimes = keyTimes
+            animation.beginTime = AVCoreAnimationBeginTimeAtZero
+            animation.duration = duration
+            animation.calculationMode = .linear
+            animation.isRemovedOnCompletion = false
+            animation.fillMode = .both
+            cursorLayer.add(animation, forKey: "cursor-position")
+        }
+
+        return cursorLayer
+    }
+
+    private static func cursorOutputPoint(
+        telemetryPoint: CGPoint,
+        outputTime: Double,
+        outputSize: CGSize,
+        contentRect: CGRect,
+        cropRect: CGRect,
+        sourceSize: CGSize,
+        edits: TimelineEditSnapshot,
+        editPlan: TimelineExportEditPlan,
+        track: CursorTelemetryTrack
+    ) -> CGPoint {
+        let telemetryWidth = CGFloat(max(track.width, 1))
+        let telemetryHeight = CGFloat(max(track.height, 1))
+        let sourcePoint = CGPoint(
+            x: CGFloat(telemetryPoint.x) / telemetryWidth * sourceSize.width,
+            y: CGFloat(telemetryPoint.y) / telemetryHeight * sourceSize.height
+        )
+        let cropRelativeX = sourcePoint.x - cropRect.minX
+        let cropRelativeY = sourcePoint.y - cropRect.minY
+        let scale = min(contentRect.width / max(cropRect.width, 1), contentRect.height / max(cropRect.height, 1))
+        let scaledSize = CGSize(width: cropRect.width * scale, height: cropRect.height * scale)
+        let placedRect = CGRect(
+            x: contentRect.midX - scaledSize.width / 2,
+            y: contentRect.midY - scaledSize.height / 2,
+            width: scaledSize.width,
+            height: scaledSize.height
+        )
+
+        var point = CGPoint(
+            x: placedRect.minX + cropRelativeX * scale,
+            y: placedRect.maxY - cropRelativeY * scale
+        )
+
+        if let zoomEffect = activeZoomEffect(edits: edits, editPlan: editPlan, outputTime: outputTime) {
+            let focus = CGPoint(
+                x: placedRect.minX + placedRect.width * CGFloat(zoomEffect.focusX),
+                y: placedRect.minY + placedRect.height * CGFloat(1 - zoomEffect.focusY)
+            )
+            let depth = CGFloat(max(1, zoomEffect.depth))
+            point = CGPoint(
+                x: focus.x + (point.x - focus.x) * depth,
+                y: focus.y + (point.y - focus.y) * depth
+            )
+        }
+
+        point.x = min(max(point.x, 0), outputSize.width)
+        point.y = min(max(point.y, 0), outputSize.height)
+        return point
+    }
+
+    private static func activeZoomEffect(edits: TimelineEditSnapshot, editPlan: TimelineExportEditPlan, outputTime: Double) -> TimelineZoomEffect? {
+        guard outputTime.isFinite else { return nil }
+        let activeZoom = edits.zoomRegions
+            .sorted { $0.span.start < $1.span.start }
+            .last { zoom in
+                let start = editPlan.outputTime(forSourceTime: zoom.span.start) ?? zoom.span.start
+                let end = editPlan.outputTime(forSourceTime: zoom.span.end) ?? zoom.span.end
+                return outputTime >= start && outputTime < end
+            }
+        guard let zoom = activeZoom else { return nil }
+
+        let start = editPlan.outputTime(forSourceTime: zoom.span.start) ?? zoom.span.start
+        let end = editPlan.outputTime(forSourceTime: zoom.span.end) ?? zoom.span.end
+        let outputSpan = TimelineSpan(start: start, end: end)
+        let progress = TimelineZoomAnimator.animationProgress(for: outputSpan, at: outputTime)
+        return TimelineZoomEffect(
+            depth: 1 + (max(1, zoom.depth) - 1) * progress,
+            focusX: zoom.focusX,
+            focusY: zoom.focusY
+        )
+    }
+
+    private static func exportSourceContentRect(renderSize: CGSize, cropSize: CGSize, styling: VideoBackgroundStyling) -> CGRect {
+        let renderRect = CGRect(origin: .zero, size: renderSize)
+        let minDim = min(renderSize.width, renderSize.height)
+        let pad = styling.paddingRatio * minDim
+        let innerSize = CGSize(
+            width: max(2, renderSize.width - 2 * pad),
+            height: max(2, renderSize.height - 2 * pad)
+        )
+        let innerRect = CGRect(
+            x: renderRect.midX - innerSize.width / 2,
+            y: renderRect.midY - innerSize.height / 2,
+            width: innerSize.width,
+            height: innerSize.height
+        )
+        let frameScale = min(innerSize.width / max(cropSize.width, 1), innerSize.height / max(cropSize.height, 1))
+        let frameSize = CGSize(width: cropSize.width * frameScale, height: cropSize.height * frameScale)
+        let frameRect = CGRect(
+            x: innerRect.midX - frameSize.width / 2,
+            y: innerRect.midY - frameSize.height / 2,
+            width: frameSize.width,
+            height: frameSize.height
+        )
+        guard styling.inset.isEnabled else { return frameRect }
+        let coreImageBalance = VideoInsetBalance(
+            left: styling.inset.balance.left,
+            top: 1 - styling.inset.balance.top
+        )
+        return VideoInsetGeometry.contentRect(
+            in: frameRect,
+            amountRatio: styling.inset.amountRatio,
+            balance: coreImageBalance
+        )
+    }
+
+    private static func cursorPath(size: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: 0, y: size * 1.18))
+        path.addLine(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: size * 0.78, y: size * 0.76))
+        path.addLine(to: CGPoint(x: size * 0.43, y: size * 0.82))
+        path.addLine(to: CGPoint(x: size * 0.64, y: size * 1.23))
+        path.addLine(to: CGPoint(x: size * 0.45, y: size * 1.30))
+        path.addLine(to: CGPoint(x: size * 0.24, y: size * 0.88))
+        path.addLine(to: CGPoint(x: 0, y: size * 1.18))
+        path.closeSubpath()
+        return path
     }
 }

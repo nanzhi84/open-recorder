@@ -1,0 +1,56 @@
+import CoreGraphics
+import XCTest
+@preconcurrency import ScreenCaptureKit
+@testable import OpenRecorderMac
+
+@MainActor
+final class NativeScreenRecorderConfigurationTests: XCTestCase {
+    func testStreamConfigurationCapturesSystemAudioWhenEnabled() {
+        let configuration = NativeScreenRecorder.makeStreamConfiguration(
+            width: 1920,
+            height: 1080,
+            sourceRect: nil,
+            options: RecordingCaptureOptions(
+                includeMicrophone: false,
+                microphoneDeviceID: nil,
+                includeSystemAudio: true,
+                includeCamera: false,
+                cameraDeviceID: nil,
+                showCursor: true,
+                showClicks: false
+            )
+        )
+
+        XCTAssertTrue(configuration.capturesAudio)
+        XCTAssertFalse(configuration.captureMicrophone)
+        XCTAssertNil(configuration.microphoneCaptureDeviceID)
+        XCTAssertEqual(configuration.sampleRate, 48_000)
+        XCTAssertEqual(configuration.channelCount, 2)
+        XCTAssertFalse(configuration.excludesCurrentProcessAudio)
+        XCTAssertFalse(configuration.showsCursor)
+    }
+
+    func testStreamConfigurationLeavesSystemAudioOffByDefault() {
+        let configuration = NativeScreenRecorder.makeStreamConfiguration(
+            width: 1280,
+            height: 720,
+            sourceRect: CGRect(x: 20, y: 30, width: 640, height: 360),
+            options: RecordingCaptureOptions(
+                includeMicrophone: false,
+                microphoneDeviceID: "stale-device",
+                includeSystemAudio: false,
+                includeCamera: false,
+                cameraDeviceID: nil,
+                showCursor: false,
+                showClicks: true
+            )
+        )
+
+        XCTAssertFalse(configuration.capturesAudio)
+        XCTAssertFalse(configuration.captureMicrophone)
+        XCTAssertNil(configuration.microphoneCaptureDeviceID)
+        XCTAssertFalse(configuration.showsCursor)
+        XCTAssertTrue(configuration.showMouseClicks)
+        XCTAssertEqual(configuration.sourceRect, CGRect(x: 20, y: 30, width: 640, height: 360))
+    }
+}

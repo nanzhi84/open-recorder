@@ -301,6 +301,9 @@ final class AppWindowActions {
                 openWindow("studio")
             }
             activateApp()
+        case .closeCaptureSetup:
+            dismissWindow("source-selector")
+            dismissWindow("area-selector")
         case .closeSourceSelector:
             dismissWindow("source-selector")
         case .closeMicrophoneSelector:
@@ -534,11 +537,22 @@ private final class GlobalRecordingHotKeyController {
 
 private enum OpenRecorderMenuBarIcon {
     static var image: NSImage {
-        let image = Bundle.module
-            .url(forResource: "OpenRecorderMenuBarIcon", withExtension: "png")
-            .flatMap(NSImage.init(contentsOf:)) ?? NSImage(size: NSSize(width: 18, height: 18))
+        let image = resourceURL
+            .flatMap(NSImage.init(contentsOf:)) ??
+            NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Open Recorder") ??
+            NSImage(size: NSSize(width: 18, height: 18))
         image.size = NSSize(width: 18, height: 18)
-        image.isTemplate = false
+        image.isTemplate = true
         return image
+    }
+
+    private static var resourceURL: URL? {
+        if let url = Bundle.main.resourceURL?
+            .appendingPathComponent("OpenRecorderMac_OpenRecorderMac.bundle")
+            .appendingPathComponent("OpenRecorderMenuBarIcon.png"),
+           FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
+        return Bundle.module.url(forResource: "OpenRecorderMenuBarIcon", withExtension: "png")
     }
 }

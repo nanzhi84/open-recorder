@@ -55,8 +55,8 @@ struct BackgroundPickerView: View {
             case .transparent: transparentNote
             }
         }
-        .padding(10)
-        .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 3)
         .onChange(of: selection) { _, newValue in
             let incoming = newValue.presetKind
             if activeKind != incoming {

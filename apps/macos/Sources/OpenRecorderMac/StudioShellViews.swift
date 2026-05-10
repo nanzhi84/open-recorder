@@ -24,13 +24,15 @@ struct StudioShell: View {
     var editorSession: EditorSession?
     @State private var isShortcutsHelpPresented = false
     @StateObject private var timelineEdits = TimelineEditController()
+    @StateObject private var screenshotEditor = ScreenshotEditorController()
 
     var body: some View {
         VStack(spacing: 0) {
             StudioTitleBar(
                 editorSession: editorSession,
                 isShortcutsHelpPresented: $isShortcutsHelpPresented,
-                timelineEdits: timelineEdits
+                timelineEdits: timelineEdits,
+                screenshotEditor: screenshotEditor
             )
             detailView
         }
@@ -55,27 +57,88 @@ struct StudioShell: View {
     private func handleShellShortcut(_ event: NSEvent) -> Bool {
         guard !event.isARepeat else { return false }
         guard event.modifierFlags.contains(.command),
-              event.modifierFlags.intersection([.control, .option]).isEmpty,
-              (event.charactersIgnoringModifiers ?? event.characters ?? "").lowercased() == "k" else {
+              event.modifierFlags.intersection([.control, .option]).isEmpty else {
             return false
         }
 
-        isShortcutsHelpPresented.toggle()
-        return true
+        let key = (event.charactersIgnoringModifiers ?? event.characters ?? "").lowercased()
+        if key == "k" {
+            isShortcutsHelpPresented.toggle()
+            return true
+        }
+
+        if key == "z", !isTextInputActive {
+            if event.modifierFlags.contains(.shift) {
+                return redoActiveEditor()
+            }
+            return undoActiveEditor()
+        }
+
+        return false
     }
 
     @ViewBuilder
     private var detailView: some View {
         switch model.selectedSection {
         case .capture:
-            EditorStudioView(editorSession: editorSession, timelineEdits: timelineEdits)
+            EditorStudioView(editorSession: editorSession, timelineEdits: timelineEdits, screenshotEditor: screenshotEditor)
         case .projects:
             ProjectsStudioView()
         case .editor:
-            EditorStudioView(editorSession: editorSession, timelineEdits: timelineEdits)
+            EditorStudioView(editorSession: editorSession, timelineEdits: timelineEdits, screenshotEditor: screenshotEditor)
         case .settings:
             SettingsStudioView()
         }
+    }
+
+    private var activeEditorMediaKind: EditorMediaKind? {
+        if let editorSession {
+            return editorSession.kind
+        }
+        if model.currentVideoURL != nil {
+            return .video
+        }
+        if model.currentScreenshotURL != nil {
+            return .screenshot
+        }
+        return nil
+    }
+
+    private func undoActiveEditor() -> Bool {
+        guard model.selectedSection == .editor else { return false }
+        switch activeEditorMediaKind {
+        case .video:
+            guard timelineEdits.canUndo else { return false }
+            timelineEdits.undo()
+            return true
+        case .screenshot:
+            guard screenshotEditor.canUndo else { return false }
+            screenshotEditor.undo()
+            return true
+        case nil:
+            return false
+        }
+    }
+
+    private func redoActiveEditor() -> Bool {
+        guard model.selectedSection == .editor else { return false }
+        switch activeEditorMediaKind {
+        case .video:
+            guard timelineEdits.canRedo else { return false }
+            timelineEdits.redo()
+            return true
+        case .screenshot:
+            guard screenshotEditor.canRedo else { return false }
+            screenshotEditor.redo()
+            return true
+        case nil:
+            return false
+        }
+    }
+
+    private var isTextInputActive: Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+        return responder is NSTextView || responder is NSTextField
     }
 }
 
@@ -162,11 +225,31 @@ struct StudioIconNavButton: View {
     }
 }
 
+struct EditorHistoryButton: View {
+    var title: String
+    var symbolName: String
+    var isEnabled: Bool
+    var action: () -> Void
+
+    var body: some View {
+        StudioButton(hitTarget: .rounded(6), help: title, action: action) {
+            Image(systemName: symbolName)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 28, height: 28)
+                .foregroundStyle(isEnabled ? Color.primary.opacity(0.86) : Color.secondary.opacity(0.38))
+                .background(isEnabled ? Color.white.opacity(0.065) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .disabled(!isEnabled)
+        .accessibilityLabel(title)
+    }
+}
+
 struct StudioTitleBar: View {
     @EnvironmentObject private var model: AppModel
     var editorSession: EditorSession?
     @Binding var isShortcutsHelpPresented: Bool
     @ObservedObject var timelineEdits: TimelineEditController
+    @ObservedObject var screenshotEditor: ScreenshotEditorController
 
     var body: some View {
         HStack(spacing: 12) {
@@ -175,7 +258,10 @@ struct StudioTitleBar: View {
             titleLabel
                 .frame(minWidth: 0, maxWidth: .infinity)
 
-            exportButton
+            HStack(spacing: 8) {
+                editorHistoryControls
+                exportButton
+            }
         }
         .frame(height: 48)
         .padding(.horizontal, 12)
@@ -190,6 +276,26 @@ struct StudioTitleBar: View {
                 timelineEdits.clearSelection()
             }
         )
+    }
+
+    @ViewBuilder
+    private var editorHistoryControls: some View {
+        if model.selectedSection == .editor, editorMediaKind != nil {
+            HStack(spacing: 4) {
+                EditorHistoryButton(title: "Undo", symbolName: "arrow.uturn.backward", isEnabled: canUndo) {
+                    undo()
+                }
+                EditorHistoryButton(title: "Redo", symbolName: "arrow.uturn.forward", isEnabled: canRedo) {
+                    redo()
+                }
+            }
+            .padding(3)
+            .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.studioBorder.opacity(0.8), lineWidth: 1)
+            }
+        }
     }
 
     @ViewBuilder
@@ -218,6 +324,50 @@ struct StudioTitleBar: View {
                     .background(Color.brand, in: RoundedRectangle(cornerRadius: 7))
                     .foregroundStyle(Color.white)
             }
+        }
+    }
+
+    private var canUndo: Bool {
+        switch editorMediaKind {
+        case .video:
+            timelineEdits.canUndo
+        case .screenshot:
+            screenshotEditor.canUndo
+        case nil:
+            false
+        }
+    }
+
+    private var canRedo: Bool {
+        switch editorMediaKind {
+        case .video:
+            timelineEdits.canRedo
+        case .screenshot:
+            screenshotEditor.canRedo
+        case nil:
+            false
+        }
+    }
+
+    private func undo() {
+        switch editorMediaKind {
+        case .video:
+            timelineEdits.undo()
+        case .screenshot:
+            screenshotEditor.undo()
+        case nil:
+            break
+        }
+    }
+
+    private func redo() {
+        switch editorMediaKind {
+        case .video:
+            timelineEdits.redo()
+        case .screenshot:
+            screenshotEditor.redo()
+        case nil:
+            break
         }
     }
 
@@ -292,8 +442,10 @@ struct EditorShortcutsHelpDialog: View {
     private let shortcuts = [
         EditorShortcutHelpItem(keys: "Space", action: "Play or pause preview"),
         EditorShortcutHelpItem(keys: "Z", action: "Add zoom section at playhead"),
-        EditorShortcutHelpItem(keys: "S", action: "Add speed section at playhead"),
+        EditorShortcutHelpItem(keys: "S", action: "Cycle selected clip speed"),
         EditorShortcutHelpItem(keys: "T", action: "Split clip at playhead"),
+        EditorShortcutHelpItem(keys: "Cmd Z", action: "Undo editor change"),
+        EditorShortcutHelpItem(keys: "Cmd Shift Z", action: "Redo editor change"),
         EditorShortcutHelpItem(keys: "Cmd K", action: "Toggle shortcuts")
     ]
 
@@ -320,7 +472,7 @@ struct EditorShortcutsHelpDialog: View {
                         Text(shortcut.keys)
                             .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .foregroundStyle(Color.primary)
-                            .frame(width: 74, height: 30)
+                            .frame(width: 104, height: 30)
                             .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 7)

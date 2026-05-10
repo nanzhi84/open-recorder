@@ -363,6 +363,9 @@ struct WindowCommandBridge: View {
                 openWindow(id: "studio")
             }
             NSApp.activate(ignoringOtherApps: true)
+        case .closeCaptureSetup:
+            dismissWindow(id: "source-selector")
+            dismissWindow(id: "area-selector")
         case .closeSourceSelector:
             dismissWindow(id: "source-selector")
         case .closeMicrophoneSelector:

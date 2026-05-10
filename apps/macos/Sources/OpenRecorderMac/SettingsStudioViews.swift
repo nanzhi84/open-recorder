@@ -31,6 +31,10 @@ struct SettingsStudioView: View {
                     FolderRow(title: "Projects", path: model.paths?.projectsDir)
                 }
 
+                SettingsSection(title: "Recording") {
+                    SettingsToggleRow(title: "Create zooms automatically", isOn: $model.createZoomsAutomatically)
+                }
+
                 SettingsSection(title: "Permissions") {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
@@ -134,6 +138,23 @@ struct FolderRow: View {
                         .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 7))
                 }
             }
+        }
+        .font(.system(size: 13))
+    }
+}
+
+struct SettingsToggleRow: View {
+    var title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
         }
         .font(.system(size: 13))
     }

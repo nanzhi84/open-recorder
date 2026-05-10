@@ -78,3 +78,73 @@ final class ScreenshotExportRendererTests: XCTestCase {
         XCTAssertTrue(data.starts(with: Data([0x89, 0x50, 0x4E, 0x47])))
     }
 }
+
+final class ScreenshotEditorHistoryTests: XCTestCase {
+    @MainActor
+    func testUndoRedoBackgroundStyleChange() {
+        let editor = ScreenshotEditorController()
+        let background = BackgroundStyle.solid(BackgroundPresets.solidColors[1])
+
+        editor.update(\.background, to: background)
+
+        XCTAssertEqual(editor.state.background, background)
+        XCTAssertTrue(editor.canUndo)
+
+        editor.undo()
+
+        XCTAssertEqual(editor.state.background, ScreenshotEditorState.default.background)
+        XCTAssertFalse(editor.canUndo)
+        XCTAssertTrue(editor.canRedo)
+
+        editor.redo()
+
+        XCTAssertEqual(editor.state.background, background)
+    }
+
+    @MainActor
+    func testSliderTransactionCollapsesScreenshotStyleChanges() {
+        let editor = ScreenshotEditorController()
+
+        editor.beginUndoTransaction()
+        editor.update(\.padding, to: 72)
+        editor.update(\.padding, to: 96)
+        editor.endUndoTransaction()
+
+        XCTAssertEqual(editor.state.padding, 96)
+        XCTAssertTrue(editor.canUndo)
+
+        editor.undo()
+
+        XCTAssertEqual(editor.state.padding, ScreenshotEditorState.default.padding)
+        XCTAssertFalse(editor.canUndo)
+        XCTAssertTrue(editor.canRedo)
+    }
+
+    @MainActor
+    func testRedoIsClearedAfterNewScreenshotStyleChange() {
+        let editor = ScreenshotEditorController()
+
+        editor.update(\.padding, to: 72)
+        editor.undo()
+        XCTAssertTrue(editor.canRedo)
+
+        editor.update(\.imageShadow, to: 0.2)
+
+        XCTAssertFalse(editor.canRedo)
+        XCTAssertEqual(editor.state.imageShadow, 0.2, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testResetHistoryKeepsScreenshotStyleButClearsUndo() {
+        let editor = ScreenshotEditorController()
+
+        editor.update(\.imageRoundness, to: 24)
+        XCTAssertTrue(editor.canUndo)
+
+        editor.resetHistory()
+
+        XCTAssertEqual(editor.state.imageRoundness, 24, accuracy: 0.001)
+        XCTAssertFalse(editor.canUndo)
+        XCTAssertFalse(editor.canRedo)
+    }
+}

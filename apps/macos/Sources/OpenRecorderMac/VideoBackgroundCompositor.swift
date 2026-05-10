@@ -6,19 +6,112 @@ import CoreVideo
 import Foundation
 import Metal
 
+struct VideoInsetBalance: Equatable {
+    var left: Double
+    var top: Double
+
+    static let centered = VideoInsetBalance(left: 0.5, top: 0.5)
+
+    var clamped: VideoInsetBalance {
+        VideoInsetBalance(
+            left: max(0, min(left, 1)),
+            top: max(0, min(top, 1))
+        )
+    }
+}
+
+struct VideoInsetStyling: Equatable {
+    var amountRatio: Double
+    var color: SerializableColor
+    var opacity: Double
+    var balance: VideoInsetBalance
+
+    static let none = VideoInsetStyling(
+        amountRatio: 0,
+        color: SerializableColor(hex: "#276FAA"),
+        opacity: 1,
+        balance: .centered
+    )
+
+    var isEnabled: Bool {
+        amountRatio > 0
+    }
+}
+
+struct VideoInsetLayout: Equatable {
+    var frameRect: CGRect
+    var contentRect: CGRect
+}
+
+enum VideoInsetGeometry {
+    static func amountRatio(fromValue value: Double) -> Double {
+        max(0, min(value, 100)) / 100 * 0.5
+    }
+
+    static func layout(in frameRect: CGRect, amountRatio: Double, balance: VideoInsetBalance) -> VideoInsetLayout {
+        let contentRect = contentRect(in: frameRect, amountRatio: amountRatio, balance: balance)
+        guard contentRect != .zero else {
+            return VideoInsetLayout(frameRect: .zero, contentRect: .zero)
+        }
+
+        let resolvedAmount = max(0, min(amountRatio, 0.95))
+        guard resolvedAmount > 0 else {
+            return VideoInsetLayout(frameRect: frameRect, contentRect: contentRect)
+        }
+
+        let targetInset = min(frameRect.width, frameRect.height) * resolvedAmount / 2
+        let leftInset = min(targetInset, max(0, contentRect.minX - frameRect.minX))
+        let rightInset = min(targetInset, max(0, frameRect.maxX - contentRect.maxX))
+        let topInset = min(targetInset, max(0, contentRect.minY - frameRect.minY))
+        let bottomInset = min(targetInset, max(0, frameRect.maxY - contentRect.maxY))
+        let insetFrameRect = CGRect(
+            x: contentRect.minX - leftInset,
+            y: contentRect.minY - topInset,
+            width: contentRect.width + leftInset + rightInset,
+            height: contentRect.height + topInset + bottomInset
+        )
+
+        return VideoInsetLayout(frameRect: insetFrameRect, contentRect: contentRect)
+    }
+
+    static func contentRect(in frameRect: CGRect, amountRatio: Double, balance: VideoInsetBalance) -> CGRect {
+        guard frameRect.width.isFinite,
+              frameRect.height.isFinite,
+              frameRect.width > 0,
+              frameRect.height > 0 else {
+            return .zero
+        }
+
+        let scale = max(0.05, 1 - max(0, min(amountRatio, 0.95)))
+        let contentSize = CGSize(width: frameRect.width * scale, height: frameRect.height * scale)
+        let freeX = max(0, frameRect.width - contentSize.width)
+        let freeY = max(0, frameRect.height - contentSize.height)
+        let resolvedBalance = balance.clamped
+
+        return CGRect(
+            x: frameRect.minX + freeX * resolvedBalance.left,
+            y: frameRect.minY + freeY * resolvedBalance.top,
+            width: contentSize.width,
+            height: contentSize.height
+        )
+    }
+}
+
 struct VideoBackgroundStyling: Equatable {
     var background: BackgroundStyle
     var paddingRatio: Double
     var borderRadiusRatio: Double
     var shadowIntensity: Double
     var backgroundBlurRatio: Double
+    var inset: VideoInsetStyling
 
     static let none = VideoBackgroundStyling(
         background: .transparent,
         paddingRatio: 0,
         borderRadiusRatio: 0,
         shadowIntensity: 0,
-        backgroundBlurRatio: 0
+        backgroundBlurRatio: 0,
+        inset: .none
     )
 
     var isPassthrough: Bool {
@@ -26,7 +119,8 @@ struct VideoBackgroundStyling: Equatable {
             paddingRatio == 0 &&
             borderRadiusRatio == 0 &&
             shadowIntensity == 0 &&
-            backgroundBlurRatio == 0
+            backgroundBlurRatio == 0 &&
+            !inset.isEnabled
     }
 }
 
@@ -40,6 +134,7 @@ final class VideoBackgroundCompositionInstruction: NSObject, AVVideoCompositionI
     let styling: VideoBackgroundStyling
     let preferredTransform: CGAffineTransform
     let normalizedSize: CGSize
+    let cropRect: CGRect
     let renderSize: CGSize
     let edits: TimelineEditSnapshot
     let editPlan: TimelineExportEditPlan
@@ -50,6 +145,7 @@ final class VideoBackgroundCompositionInstruction: NSObject, AVVideoCompositionI
         styling: VideoBackgroundStyling,
         preferredTransform: CGAffineTransform,
         normalizedSize: CGSize,
+        cropRect: CGRect,
         renderSize: CGSize,
         edits: TimelineEditSnapshot = .empty,
         editPlan: TimelineExportEditPlan = TimelineExportEditPlan(segments: [], outputDuration: 0)
@@ -59,6 +155,7 @@ final class VideoBackgroundCompositionInstruction: NSObject, AVVideoCompositionI
         self.styling = styling
         self.preferredTransform = preferredTransform
         self.normalizedSize = normalizedSize
+        self.cropRect = cropRect
         self.renderSize = renderSize
         self.edits = edits
         self.editPlan = editPlan
@@ -180,8 +277,13 @@ final class VideoBackgroundCompositor: NSObject, AVVideoCompositing, @unchecked 
 
         var sourceImage = CIImage(cvPixelBuffer: source)
         sourceImage = sourceImage.transformed(by: instruction.preferredTransform)
-        let normalizedRect = CGRect(origin: .zero, size: instruction.normalizedSize)
-        sourceImage = sourceImage.cropped(to: normalizedRect)
+        let cropRect = Self.coreImageCropRect(
+            fromTopLeftRect: instruction.cropRect,
+            sourceSize: instruction.normalizedSize
+        )
+        sourceImage = sourceImage
+            .cropped(to: cropRect)
+            .transformed(by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY))
 
         let minDim = min(renderSize.width, renderSize.height)
         let pad = instruction.styling.paddingRatio * minDim
@@ -196,23 +298,33 @@ final class VideoBackgroundCompositor: NSObject, AVVideoCompositing, @unchecked 
             height: innerSize.height
         )
 
-        let sourceSize = instruction.normalizedSize
-        let scale = min(innerSize.width / max(sourceSize.width, 1), innerSize.height / max(sourceSize.height, 1))
+        let sourceSize = instruction.cropRect.size
+        let frameScale = min(innerSize.width / max(sourceSize.width, 1), innerSize.height / max(sourceSize.height, 1))
+        let frameSize = CGSize(width: sourceSize.width * frameScale, height: sourceSize.height * frameScale)
+        let frameRect = CGRect(
+            x: innerRect.midX - frameSize.width / 2,
+            y: innerRect.midY - frameSize.height / 2,
+            width: frameSize.width,
+            height: frameSize.height
+        )
+        let sourceLayout = sourceLayout(frameRect: frameRect, styling: instruction.styling)
+        let contentRect = sourceLayout.contentRect
+        let scale = min(contentRect.width / max(sourceSize.width, 1), contentRect.height / max(sourceSize.height, 1))
         let scaledSize = CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
         let scaledImage = sourceImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         let scaledExtent = scaledImage.extent
-        let dx = innerRect.midX - scaledExtent.midX
-        let dy = innerRect.midY - scaledExtent.midY
+        let dx = contentRect.midX - scaledExtent.midX
+        let dy = contentRect.midY - scaledExtent.midY
         var positionedImage = scaledImage.transformed(by: CGAffineTransform(translationX: dx, y: dy))
 
         let placedRect = CGRect(
-            x: innerRect.midX - scaledSize.width / 2,
-            y: innerRect.midY - scaledSize.height / 2,
+            x: contentRect.midX - scaledSize.width / 2,
+            y: contentRect.midY - scaledSize.height / 2,
             width: scaledSize.width,
             height: scaledSize.height
         )
-        if let zoom = activeZoom(for: instruction, at: compositionTime) {
-            positionedImage = applyZoom(to: positionedImage, zoom: zoom, in: placedRect)
+        if let zoomEffect = activeZoomEffect(for: instruction, at: compositionTime) {
+            positionedImage = applyZoom(to: positionedImage, effect: zoomEffect, in: placedRect)
         }
         let cornerRadius = instruction.styling.borderRadiusRatio * minDim
         let maskedSource = applyRoundedMask(positionedImage, cornerRadius: cornerRadius, in: placedRect)
@@ -224,32 +336,110 @@ final class VideoBackgroundCompositor: NSObject, AVVideoCompositing, @unchecked 
         }
 
         var composed = background
+        let drawsInsetFill = instruction.styling.inset.isEnabled && instruction.styling.inset.opacity > 0
+        if instruction.styling.inset.isEnabled {
+            if instruction.styling.shadowIntensity > 0, drawsInsetFill {
+                let shadowMask = makeRoundedFill(
+                    color: CIColor.black,
+                    in: sourceLayout.frameRect,
+                    cornerRadius: cornerRadius
+                )
+                let shadow = makeShadow(
+                    shadowMask,
+                    intensity: instruction.styling.shadowIntensity,
+                    in: sourceLayout.frameRect
+                )
+                composed = shadow.composited(over: composed)
+            }
+            if drawsInsetFill {
+                let insetLayer = makeInsetLayer(
+                    for: instruction.styling.inset,
+                    in: sourceLayout.frameRect,
+                    cornerRadius: cornerRadius
+                )
+                composed = insetLayer.composited(over: composed)
+            }
+        }
         if instruction.styling.shadowIntensity > 0 {
-            let shadow = makeShadow(maskedSource, intensity: instruction.styling.shadowIntensity, in: placedRect)
-            composed = shadow.composited(over: composed)
+            if !drawsInsetFill {
+                let shadow = makeShadow(maskedSource, intensity: instruction.styling.shadowIntensity, in: placedRect)
+                composed = shadow.composited(over: composed)
+            }
         }
         composed = maskedSource.composited(over: composed)
 
         return composed.cropped(to: renderRect)
     }
 
-    private func activeZoom(for instruction: VideoBackgroundCompositionInstruction, at outputTime: Double) -> TimelineZoomRegion? {
+    private func sourceLayout(frameRect: CGRect, styling: VideoBackgroundStyling) -> VideoInsetLayout {
+        guard styling.inset.isEnabled else {
+            return VideoInsetLayout(frameRect: frameRect, contentRect: frameRect)
+        }
+        let coreImageBalance = VideoInsetBalance(
+            left: styling.inset.balance.left,
+            top: 1 - styling.inset.balance.top
+        )
+        return VideoInsetGeometry.layout(
+            in: frameRect,
+            amountRatio: styling.inset.amountRatio,
+            balance: coreImageBalance
+        )
+    }
+
+    private func makeInsetLayer(for inset: VideoInsetStyling, in rect: CGRect, cornerRadius: CGFloat) -> CIImage {
+        let color = CIColor(
+            red: CGFloat(inset.color.red),
+            green: CGFloat(inset.color.green),
+            blue: CGFloat(inset.color.blue),
+            alpha: CGFloat(max(0, min(inset.color.alpha * inset.opacity, 1)))
+        )
+        let fill = CIImage(color: color).cropped(to: rect)
+        return applyRoundedMask(fill, cornerRadius: cornerRadius, in: rect)
+    }
+
+    private func makeRoundedFill(color: CIColor, in rect: CGRect, cornerRadius: CGFloat) -> CIImage {
+        let fill = CIImage(color: color).cropped(to: rect)
+        return applyRoundedMask(fill, cornerRadius: cornerRadius, in: rect)
+    }
+
+    private static func coreImageCropRect(fromTopLeftRect rect: CGRect, sourceSize: CGSize) -> CGRect {
+        let clamped = VideoCropSelection.clampedPixelRect(rect, in: sourceSize)
+        return CGRect(
+            x: clamped.minX,
+            y: max(0, sourceSize.height - clamped.maxY),
+            width: clamped.width,
+            height: clamped.height
+        )
+    }
+
+    private func activeZoomEffect(for instruction: VideoBackgroundCompositionInstruction, at outputTime: Double) -> TimelineZoomEffect? {
         guard outputTime.isFinite else { return nil }
-        return instruction.edits.zoomRegions
+        let activeZoom = instruction.edits.zoomRegions
             .sorted { $0.span.start < $1.span.start }
             .last { zoom in
                 let start = instruction.editPlan.outputTime(forSourceTime: zoom.span.start) ?? zoom.span.start
                 let end = instruction.editPlan.outputTime(forSourceTime: zoom.span.end) ?? zoom.span.end
                 return outputTime >= start && outputTime < end
             }
+        guard let zoom = activeZoom else { return nil }
+
+        let start = instruction.editPlan.outputTime(forSourceTime: zoom.span.start) ?? zoom.span.start
+        let end = instruction.editPlan.outputTime(forSourceTime: zoom.span.end) ?? zoom.span.end
+        let outputSpan = TimelineSpan(start: start, end: end)
+        let progress = TimelineZoomAnimator.animationProgress(for: outputSpan, at: outputTime)
+        return TimelineZoomEffect(
+            depth: 1 + (max(1, zoom.depth) - 1) * progress,
+            focusX: zoom.focusX,
+            focusY: zoom.focusY
+        )
     }
 
-    private func applyZoom(to image: CIImage, zoom: TimelineZoomRegion, in rect: CGRect) -> CIImage {
-        let depth = CGFloat(max(1, zoom.depth))
+    private func applyZoom(to image: CIImage, effect: TimelineZoomEffect, in rect: CGRect) -> CIImage {
+        let depth = CGFloat(max(1, effect.depth))
         guard depth > 1 else { return image }
         let focus = CGPoint(
-            x: rect.minX + rect.width * CGFloat(zoom.focusX),
-            y: rect.minY + rect.height * CGFloat(1 - zoom.focusY)
+            x: rect.minX + rect.width * CGFloat(effect.focusX),
+            y: rect.minY + rect.height * CGFloat(1 - effect.focusY)
         )
         let transform = CGAffineTransform(translationX: -focus.x, y: -focus.y)
             .concatenating(CGAffineTransform(scaleX: depth, y: depth))

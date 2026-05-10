@@ -48,6 +48,13 @@ struct SerializableColor: Equatable, Hashable, Codable {
     var color: Color {
         Color(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
     }
+
+    var hexString: String {
+        let redValue = Int((max(0, min(red, 1)) * 255).rounded())
+        let greenValue = Int((max(0, min(green, 1)) * 255).rounded())
+        let blueValue = Int((max(0, min(blue, 1)) * 255).rounded())
+        return String(format: "#%02X%02X%02X", redValue, greenValue, blueValue)
+    }
 }
 
 struct GradientStop: Equatable, Hashable, Codable {

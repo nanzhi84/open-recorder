@@ -21,7 +21,6 @@ struct SourceSelectorWindowView: View {
                 visibleTabs: visibleTabs,
                 onCancel: {
                     model.cancelCapture()
-                    dismissWindow(id: "source-selector")
                 },
                 onShare: {
                     if let selectedSource = model.selectedSource {

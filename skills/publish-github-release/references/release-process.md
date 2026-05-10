@@ -91,11 +91,20 @@ That workflow:
 1. Detects that `apps/rust-service/Cargo.toml` changed on `main`.
 2. Confirms the version actually changed.
 3. Reads `.github/release-plan.json` for release metadata when it exists.
-4. Builds the macOS Swift app.
-5. Builds the Rust service.
-6. Packages the macOS release artifacts.
-7. Uploads the packaged app as `open-recorder-macos.zip`.
+4. Builds and tests the macOS Swift app and Rust service on Apple Silicon and Intel runners.
+5. Packages Apple Silicon and Intel app bundles as ZIP and DMG artifacts.
+6. Builds a universal app by merging the native executables with `lipo`, then signs and packages that app as ZIP and DMG artifacts.
+7. Uploads the release assets:
+   - `open-recorder-macos-arm64.zip`
+   - `open-recorder-macos-arm64.dmg`
+   - `open-recorder-macos-x64.zip`
+   - `open-recorder-macos-x64.dmg`
+   - `open-recorder-macos-universal.zip`
+   - `open-recorder-macos-universal.dmg`
+   - `open-recorder-macos.zip` as a backwards-compatible copy of the universal ZIP
 8. Creates or updates the GitHub release with `ncipollo/release-action`.
+
+The Homebrew tap workflow consumes the architecture-specific DMGs. Its generated cask maps Apple Silicon Macs to `open-recorder-macos-arm64.dmg` and Intel Macs to `open-recorder-macos-x64.dmg`; the universal artifacts are intended for direct GitHub downloads when users want one build that runs on both architectures.
 
 The workflow still supports manual `workflow_dispatch` as a fallback, but the normal path is:
 

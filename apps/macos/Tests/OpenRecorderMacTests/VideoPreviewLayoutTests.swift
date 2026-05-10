@@ -3,6 +3,39 @@ import XCTest
 @testable import OpenRecorderMac
 
 final class VideoPreviewLayoutTests: XCTestCase {
+    func testAutoPreviewAspectUsesCropSelectionAspect() {
+        let selection = VideoCropSelection(
+            normalizedRect: CGRect(x: 0, y: 0, width: 0.5, height: 1),
+            sizing: .preset(.source)
+        )
+
+        let ratio = VideoPreviewAspectPreset.auto.aspectRatio(
+            for: selection,
+            sourceSize: CGSize(width: 1200, height: 800)
+        )
+
+        XCTAssertEqual(ratio, 0.75, accuracy: 0.001)
+    }
+
+    func testFixedPreviewAspectPresetsResolveExpectedRatios() {
+        let cases: [(preset: VideoPreviewAspectPreset, ratio: CGFloat)] = [
+            (.wide, 16.0 / 9.0),
+            (.square, 1),
+            (.classic, 4.0 / 3.0),
+            (.vertical, 9.0 / 16.0),
+            (.tall, 3.0 / 4.0),
+            (.portrait, 4.0 / 5.0)
+        ]
+
+        for testCase in cases {
+            XCTAssertEqual(
+                testCase.preset.aspectRatio(for: .fullFrame, sourceSize: CGSize(width: 1920, height: 1080)),
+                testCase.ratio,
+                accuracy: 0.001
+            )
+        }
+    }
+
     func testStageFitsWidePaneByHeight() {
         let size = PreviewStageLayout.fittedSize(
             forAspectRatio: PreviewStageLayout.videoAspectRatio,
@@ -32,5 +65,71 @@ final class VideoPreviewLayoutTests: XCTestCase {
             PreviewStageLayout.fittedSize(forAspectRatio: PreviewStageLayout.videoAspectRatio, in: .zero),
             .zero
         )
+    }
+
+    func testRecordingFrameKeepsSourceAspectInsidePaddedStage() {
+        let rect = PreviewStageLayout.recordingFrameRect(
+            forAspectRatio: PreviewStageLayout.videoAspectRatio,
+            in: CGSize(width: 1200, height: 675),
+            paddingValue: 50
+        )
+
+        XCTAssertEqual(rect.minX, 120, accuracy: 0.001)
+        XCTAssertEqual(rect.minY, 67.5, accuracy: 0.001)
+        XCTAssertEqual(rect.width, 960, accuracy: 0.001)
+        XCTAssertEqual(rect.height, 540, accuracy: 0.001)
+        XCTAssertEqual(rect.width / rect.height, PreviewStageLayout.videoAspectRatio, accuracy: 0.001)
+    }
+
+    func testRecordingFrameUsesFullStageWithoutPadding() {
+        let rect = PreviewStageLayout.recordingFrameRect(
+            forAspectRatio: PreviewStageLayout.videoAspectRatio,
+            in: CGSize(width: 1200, height: 675),
+            paddingValue: 0
+        )
+
+        XCTAssertEqual(rect.minX, 0, accuracy: 0.001)
+        XCTAssertEqual(rect.minY, 0, accuracy: 0.001)
+        XCTAssertEqual(rect.width, 1200, accuracy: 0.001)
+        XCTAssertEqual(rect.height, 675, accuracy: 0.001)
+    }
+
+    func testInsetGeometryUsesBalanceToDistributeFreeSpace() {
+        let rect = VideoInsetGeometry.contentRect(
+            in: CGRect(x: 10, y: 20, width: 200, height: 100),
+            amountRatio: 0.25,
+            balance: VideoInsetBalance(left: 0.38, top: 0.44)
+        )
+
+        XCTAssertEqual(rect.minX, 29, accuracy: 0.001)
+        XCTAssertEqual(rect.minY, 31, accuracy: 0.001)
+        XCTAssertEqual(rect.width, 150, accuracy: 0.001)
+        XCTAssertEqual(rect.height, 75, accuracy: 0.001)
+    }
+
+    func testInsetLayoutUsesEqualCenteredInsetOnAllEdges() {
+        let layout = VideoInsetGeometry.layout(
+            in: CGRect(x: 0, y: 0, width: 200, height: 100),
+            amountRatio: 0.25,
+            balance: .centered
+        )
+
+        XCTAssertEqual(layout.contentRect.minX - layout.frameRect.minX, 12.5, accuracy: 0.001)
+        XCTAssertEqual(layout.frameRect.maxX - layout.contentRect.maxX, 12.5, accuracy: 0.001)
+        XCTAssertEqual(layout.contentRect.minY - layout.frameRect.minY, 12.5, accuracy: 0.001)
+        XCTAssertEqual(layout.frameRect.maxY - layout.contentRect.maxY, 12.5, accuracy: 0.001)
+    }
+
+    func testInsetGeometryClampsOutOfRangeBalance() {
+        let rect = VideoInsetGeometry.contentRect(
+            in: CGRect(x: 0, y: 0, width: 100, height: 80),
+            amountRatio: 0.5,
+            balance: VideoInsetBalance(left: 2, top: -1)
+        )
+
+        XCTAssertEqual(rect.minX, 50, accuracy: 0.001)
+        XCTAssertEqual(rect.minY, 0, accuracy: 0.001)
+        XCTAssertEqual(rect.width, 50, accuracy: 0.001)
+        XCTAssertEqual(rect.height, 40, accuracy: 0.001)
     }
 }

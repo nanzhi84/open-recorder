@@ -189,7 +189,9 @@ final class HUDStateMachineTests: XCTestCase {
         XCTAssertEqual(model.hudState, .choosingMode)
         XCTAssertFalse(model.isAreaSelectionActive)
         XCTAssertTrue(model.canStartNewCapture)
-        XCTAssertEqual(model.windowCommand?.action, .closeAreaSelector)
+        XCTAssertNotEqual(model.windowCommand?.action, .showSourceSelector)
+        XCTAssertNotEqual(model.windowCommand?.action, .closeAreaSelector)
+        XCTAssertEqual(model.windowCommand?.action, .closeCaptureSetup)
     }
 
     func testEditorHandoffReleasesRecordingAndScreenshotStates() {

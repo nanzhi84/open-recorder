@@ -250,9 +250,6 @@ final class CaptureController: ObservableObject {
         try ensureScreenRecordingPermission()
 
         var arguments = ["-x", "-v"]
-        if options.showCursor {
-            arguments.append("-C")
-        }
         if options.includeMicrophone {
             arguments.append("-g")
         }

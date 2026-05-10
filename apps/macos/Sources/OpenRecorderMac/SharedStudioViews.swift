@@ -64,6 +64,14 @@ extension View {
         contentShape(Circle())
     }
 
+    func studioEditorPaneChrome() -> some View {
+        background(Color.studioPanel.opacity(0.86))
+            .overlay {
+                Rectangle()
+                    .stroke(Color.studioBorder)
+            }
+    }
+
     @ViewBuilder
     func studioHitTarget(_ target: StudioHitTarget) -> some View {
         switch target {
@@ -98,53 +106,31 @@ enum StudioSplitPaneAxis {
             size.height
         }
     }
-
-    func translation(in size: CGSize) -> CGFloat {
-        switch self {
-        case .horizontal:
-            size.width
-        case .vertical:
-            size.height
-        }
-    }
-
-    var cursor: NSCursor {
-        switch self {
-        case .horizontal:
-            .resizeLeftRight
-        case .vertical:
-            .resizeUpDown
-        }
-    }
 }
 
 struct StudioSplitPane<Primary: View, Secondary: View>: View {
     var axis: StudioSplitPaneAxis
-    @Binding var secondarySize: Double
+    var secondarySize: CGFloat
     var minPrimarySize: CGFloat
     var minSecondarySize: CGFloat
     var maxSecondarySize: CGFloat
-    var dividerThickness: CGFloat = 16
     private let primary: Primary
     private let secondary: Secondary
-    @State private var dragStartSecondarySize: CGFloat?
 
     init(
         axis: StudioSplitPaneAxis,
-        secondarySize: Binding<Double>,
+        secondarySize: CGFloat,
         minPrimarySize: CGFloat,
         minSecondarySize: CGFloat,
         maxSecondarySize: CGFloat,
-        dividerThickness: CGFloat = 16,
         @ViewBuilder primary: () -> Primary,
         @ViewBuilder secondary: () -> Secondary
     ) {
         self.axis = axis
-        _secondarySize = secondarySize
+        self.secondarySize = secondarySize
         self.minPrimarySize = minPrimarySize
         self.minSecondarySize = minSecondarySize
         self.maxSecondarySize = maxSecondarySize
-        self.dividerThickness = dividerThickness
         self.primary = primary()
         self.secondary = secondary()
     }
@@ -153,14 +139,13 @@ struct StudioSplitPane<Primary: View, Secondary: View>: View {
         GeometryReader { proxy in
             let totalSize = axis.length(in: proxy.size)
             let resolvedSecondarySize = clampedSecondarySize(totalSize: totalSize)
-            let resolvedPrimarySize = max(0, totalSize - dividerThickness - resolvedSecondarySize)
+            let resolvedPrimarySize = max(0, totalSize - resolvedSecondarySize)
 
             if axis == .horizontal {
                 HStack(spacing: 0) {
                     primary
                         .frame(width: resolvedPrimarySize, height: proxy.size.height)
                         .clipped()
-                    divider(totalSize: totalSize)
                     secondary
                         .frame(width: resolvedSecondarySize, height: proxy.size.height)
                         .clipped()
@@ -170,7 +155,6 @@ struct StudioSplitPane<Primary: View, Secondary: View>: View {
                     primary
                         .frame(width: proxy.size.width, height: resolvedPrimarySize)
                         .clipped()
-                    divider(totalSize: totalSize)
                     secondary
                         .frame(width: proxy.size.width, height: resolvedSecondarySize)
                         .clipped()
@@ -179,32 +163,14 @@ struct StudioSplitPane<Primary: View, Secondary: View>: View {
         }
     }
 
-    private func divider(totalSize: CGFloat) -> some View {
-        StudioSplitPaneDivider(axis: axis, thickness: dividerThickness)
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                    .onChanged { value in
-                        if dragStartSecondarySize == nil {
-                            dragStartSecondarySize = clampedSecondarySize(totalSize: totalSize)
-                        }
-
-                        let nextSize = (dragStartSecondarySize ?? clampedSecondarySize(totalSize: totalSize)) - axis.translation(in: value.translation)
-                        secondarySize = Double(clampedSecondarySize(nextSize, totalSize: totalSize))
-                    }
-                    .onEnded { _ in
-                        dragStartSecondarySize = nil
-                    }
-            )
-    }
-
     private func clampedSecondarySize(totalSize: CGFloat) -> CGFloat {
-        let requestedSize = CGFloat(secondarySize)
+        let requestedSize = secondarySize
         let safeSize = requestedSize.isFinite && requestedSize > 0 ? requestedSize : minSecondarySize
         return clampedSecondarySize(safeSize, totalSize: totalSize)
     }
 
     private func clampedSecondarySize(_ requestedSize: CGFloat, totalSize: CGFloat) -> CGFloat {
-        let availablePaneSize = max(0, totalSize - dividerThickness)
+        let availablePaneSize = max(0, totalSize)
         guard availablePaneSize > 0 else { return 0 }
 
         let idealUpperBound = min(maxSecondarySize, max(0, availablePaneSize - minPrimarySize))
@@ -216,44 +182,6 @@ struct StudioSplitPane<Primary: View, Secondary: View>: View {
         let fallbackUpperBound = max(0, availablePaneSize - visiblePaneSize)
         let fallbackLowerBound = min(visiblePaneSize, fallbackUpperBound)
         return min(max(requestedSize, fallbackLowerBound), fallbackUpperBound)
-    }
-}
-
-private struct StudioSplitPaneDivider: View {
-    var axis: StudioSplitPaneAxis
-    var thickness: CGFloat
-    @State private var isHovering = false
-
-    var body: some View {
-        ZStack {
-            Color.clear
-            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                .fill(isHovering ? Color.brand.opacity(0.82) : Color.studioBorder.opacity(0.92))
-                .frame(
-                    width: axis == .horizontal ? 1 : 44,
-                    height: axis == .horizontal ? 44 : 1
-                )
-        }
-        .frame(
-            width: axis == .horizontal ? thickness : nil,
-            height: axis == .vertical ? thickness : nil
-        )
-        .background(Color.white.opacity(isHovering ? 0.025 : 0))
-        .rectangularHitTarget()
-        .help("Drag to resize panes")
-        .onHover { hovering in
-            isHovering = hovering
-            if hovering {
-                axis.cursor.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        .onDisappear {
-            if isHovering {
-                NSCursor.pop()
-            }
-        }
     }
 }
 
@@ -725,6 +653,7 @@ struct HUDToggle: View {
     var symbolName: String
     var isActive: Bool
     var title: String
+    var isDisabled = false
     var action: () -> Void
 
     var body: some View {
@@ -732,13 +661,37 @@ struct HUDToggle: View {
             Image(systemName: symbolName)
                 .font(.system(size: 14, weight: .medium))
                 .frame(width: 38, height: 38)
-                .foregroundStyle(isActive ? Color.blue.opacity(0.95) : Color.white.opacity(0.55))
-                .background(isActive ? Color.blue.opacity(0.16) : Color.white.opacity(0.06), in: Circle())
+                .foregroundStyle(foregroundStyle)
+                .background(backgroundStyle, in: Circle())
                 .overlay {
                     Circle()
-                        .stroke(isActive ? Color.blue.opacity(0.35) : Color.white.opacity(0.09), lineWidth: 1)
+                        .stroke(strokeStyle, lineWidth: 1)
                 }
         }
+        .disabled(isDisabled)
+        .accessibilityLabel(title)
+        .accessibilityValue(isActive ? "On" : "Off")
+    }
+
+    private var foregroundStyle: Color {
+        if isDisabled {
+            return Color.white.opacity(0.25)
+        }
+        return isActive ? Color.blue.opacity(0.95) : Color.white.opacity(0.55)
+    }
+
+    private var backgroundStyle: Color {
+        if isDisabled {
+            return Color.white.opacity(0.035)
+        }
+        return isActive ? Color.blue.opacity(0.16) : Color.white.opacity(0.06)
+    }
+
+    private var strokeStyle: Color {
+        if isDisabled {
+            return Color.white.opacity(0.06)
+        }
+        return isActive ? Color.blue.opacity(0.35) : Color.white.opacity(0.09)
     }
 }
 
@@ -751,7 +704,8 @@ extension Color {
     static let studioCard = Color(red: 0.10, green: 0.10, blue: 0.12)
     static let studioControl = Color(red: 0.12, green: 0.12, blue: 0.145)
     static let studioBorder = Color.white.opacity(0.10)
-    static let timelineClip = Color(red: 0.68, green: 0.40, blue: 0.02)
-    static let timelineClipBorder = Color(red: 0.92, green: 0.56, blue: 0.06).opacity(0.52)
-    static let timelineHandle = Color(red: 1.0, green: 0.68, blue: 0.05)
+    static let timelineClip = Color(red: 0.58, green: 0.78, blue: 0.96)
+    static let timelineClipForeground = Color(red: 0.035, green: 0.075, blue: 0.13).opacity(0.86)
+    static let timelineClipBorder = Color(red: 0.72, green: 0.88, blue: 1.0).opacity(0.78)
+    static let timelineHandle = Color(red: 0.64, green: 0.84, blue: 1.0)
 }

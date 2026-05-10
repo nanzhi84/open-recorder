@@ -95,6 +95,26 @@ struct ProjectDocument: Codable {
     var sourceName: String?
     var createdAt: String
     var updatedAt: String
+    var editorState: ProjectEditorState?
+}
+
+struct ProjectEditorState: Codable, Hashable {
+    var timelineEdits: TimelineEditSnapshot
+
+    static let empty = ProjectEditorState(timelineEdits: .empty)
+
+    init(timelineEdits: TimelineEditSnapshot = .empty) {
+        self.timelineEdits = timelineEdits
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case timelineEdits
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        timelineEdits = try container.decodeIfPresent(TimelineEditSnapshot.self, forKey: .timelineEdits) ?? .empty
+    }
 }
 
 enum EditorMediaKind: String, Codable, Hashable {
@@ -143,19 +163,22 @@ struct EditorSession: Codable, Hashable, Identifiable {
     var path: String
     var title: String
     var recordingSession: RecordingSession?
+    var timelineEditSnapshot: TimelineEditSnapshot?
 
     init(
         kind: EditorMediaKind,
         url: URL,
         title: String? = nil,
         id: UUID = UUID(),
-        recordingSession: RecordingSession? = nil
+        recordingSession: RecordingSession? = nil,
+        timelineEditSnapshot: TimelineEditSnapshot? = nil
     ) {
         self.id = id
         self.kind = kind
         self.path = url.path
         self.title = title ?? kind.displayTitle(for: url)
         self.recordingSession = recordingSession
+        self.timelineEditSnapshot = timelineEditSnapshot
     }
 
     var url: URL {
@@ -186,6 +209,41 @@ struct RecordingSession: Codable, Hashable {
     var sourceName: String?
     var showCursorOverlay: Bool
     var cursorTelemetryPath: String?
+
+    var hasRecordedCamera: Bool {
+        guard let facecamVideoPath else { return false }
+        return !facecamVideoPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+struct CursorOverlaySettings: Codable, Hashable {
+    var isVisible: Bool
+    var loops: Bool
+    var size: Double
+    var smoothing: Double
+
+    static let `default` = CursorOverlaySettings(
+        isVisible: true,
+        loops: false,
+        size: 1,
+        smoothing: 0.4
+    )
+
+    static let hidden = CursorOverlaySettings(
+        isVisible: false,
+        loops: false,
+        size: 1,
+        smoothing: 0.4
+    )
+
+    var clamped: CursorOverlaySettings {
+        CursorOverlaySettings(
+            isVisible: isVisible,
+            loops: loops,
+            size: max(0.5, min(size, 10)),
+            smoothing: max(0, min(smoothing, 2))
+        )
+    }
 }
 
 func defaultFacecamSettings(enabled: Bool) -> FacecamSettings {
@@ -413,6 +471,7 @@ enum NativeWindowCommandAction: Equatable {
     case showCameraSelector
     case showAreaSelector
     case showStudio
+    case closeCaptureSetup
     case closeSourceSelector
     case closeMicrophoneSelector
     case closeCameraSelector

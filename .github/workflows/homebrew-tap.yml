@@ -90,16 +90,12 @@ jobs:
           cat > Casks/open-recorder.rb <<'RUBY'
           cask "open-recorder" do
             version "__VERSION__"
+            arch arm: "arm64", intel: "x64"
 
-            on_arm do
-              sha256 "__SHA_ARM__"
-              url "https://github.com/__REPO__/releases/download/__TAG__/open-recorder-macos-arm64.dmg"
-            end
+            sha256 arm: "__SHA_ARM__",
+                   intel: "__SHA_INTEL__"
 
-            on_intel do
-              sha256 "__SHA_INTEL__"
-              url "https://github.com/__REPO__/releases/download/__TAG__/open-recorder-macos-x64.dmg"
-            end
+            url "https://github.com/__REPO__/releases/download/__TAG__/open-recorder-macos-#{arch}.dmg"
 
             name "Open Recorder"
             desc "Open-source screen recorder and editor"
@@ -141,8 +137,16 @@ jobs:
             exit 0
           fi
 
+          BODY_FILE="$(mktemp)"
+          cat > "$BODY_FILE" <<'BODY'
+          Automated cask update for ${{ steps.tag.outputs.tag }}.
+
+          - arm64 sha256: `${{ steps.sha.outputs.arm }}`
+          - x64 sha256: `${{ steps.sha.outputs.intel }}`
+          BODY
+
           gh pr create \
             --title "chore(cask): update open-recorder to ${{ steps.tag.outputs.tag }}" \
-            --body "Automated cask update for ${{ steps.tag.outputs.tag }}.\n\n- arm64 sha256: \\`${{ steps.sha.outputs.arm }}\\`\n- x64 sha256: \\`${{ steps.sha.outputs.intel }}\\`" \
+            --body-file "$BODY_FILE" \
             --head "${{ steps.update.outputs.branch }}" \
             --base main

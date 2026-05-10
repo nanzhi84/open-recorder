@@ -25,6 +25,45 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertEqual(model.windowCommand?.action, .showSourceSelector)
     }
 
+    func testCancelRecordingSetupReturnsToChoiceAndClosesCaptureSetup() {
+        let model = AppModel()
+
+        model.beginCapture(.recording)
+        model.cancelCapture()
+
+        XCTAssertEqual(model.hudState, .choosingMode)
+        XCTAssertEqual(model.captureFlow, .choice)
+        XCTAssertFalse(model.isAreaSelectionActive)
+        XCTAssertEqual(model.windowCommand?.action, .closeCaptureSetup)
+    }
+
+    func testCancelScreenshotSetupReturnsToChoiceAndClosesCaptureSetup() {
+        let model = AppModel()
+
+        model.beginCapture(.screenshot)
+        model.cancelCapture()
+
+        XCTAssertEqual(model.hudState, .choosingMode)
+        XCTAssertEqual(model.captureFlow, .choice)
+        XCTAssertFalse(model.isAreaSelectionActive)
+        XCTAssertEqual(model.windowCommand?.action, .closeCaptureSetup)
+    }
+
+    func testCancelReadySetupDoesNotLeaveSelectorOrAreaCloseCommand() {
+        let model = AppModel()
+        let source = makeSource()
+        model.selectedSource = source
+
+        model.beginCapture(.recording)
+        model.cancelCapture()
+
+        XCTAssertEqual(model.hudState, .choosingMode)
+        XCTAssertEqual(model.captureFlow, .choice)
+        XCTAssertNotEqual(model.windowCommand?.action, .showSourceSelector)
+        XCTAssertNotEqual(model.windowCommand?.action, .closeAreaSelector)
+        XCTAssertEqual(model.windowCommand?.action, .closeCaptureSetup)
+    }
+
     func testNewCaptureIsDisabledDuringRecordingSetup() {
         let model = AppModel()
 
@@ -218,6 +257,37 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "Selected area")
     }
 
+    func testSystemAudioToggleUpdatesRecordingOptionState() {
+        let model = AppModel()
+
+        XCTAssertFalse(model.includeSystemAudio)
+        XCTAssertTrue(model.canChangeRecordingOptions)
+
+        model.toggleSystemAudio()
+
+        XCTAssertTrue(model.includeSystemAudio)
+        XCTAssertEqual(model.statusMessage, "System audio on")
+
+        model.toggleSystemAudio()
+
+        XCTAssertFalse(model.includeSystemAudio)
+        XCTAssertEqual(model.statusMessage, "System audio off")
+    }
+
+    func testSystemAudioToggleIsLockedDuringActiveRecording() {
+        let model = AppModel()
+        model.includeSystemAudio = true
+        model.recordingPhase = .recording
+        model.capture.setRecordingForTesting(true)
+
+        XCTAssertFalse(model.canChangeRecordingOptions)
+
+        model.toggleSystemAudio()
+
+        XCTAssertTrue(model.includeSystemAudio)
+        XCTAssertEqual(model.statusMessage, "System audio is on for this recording.")
+    }
+
     func testSelectingMicrophoneDeviceEnablesMicrophoneAndStoresDevice() {
         let model = AppModel()
         model.microphoneDevices = [
@@ -388,6 +458,49 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertEqual(model.hudState.presentation, .visible)
     }
 
+    func testOnboardingRefreshMarksScreenRecordingGrantedAfterPermissionChanges() {
+        var isGranted = false
+        let model = AppModel(
+            screenRecordingPermission: ScreenRecordingPermission(client: ScreenRecordingPermissionClient(
+                preflight: { isGranted },
+                request: { isGranted },
+                hasRequestedPrompt: { true },
+                setRequestedPrompt: { _ in }
+            )),
+            accessibilityPermission: makeAccessibilityPermission(isTrusted: false),
+            onboardingStore: OnboardingCompletionBox(false).store
+        )
+
+        XCTAssertEqual(model.screenRecordingPermissionState, .requestAlreadyShown)
+
+        isGranted = true
+        model.refreshOnboardingPermissionStates()
+
+        XCTAssertEqual(model.screenRecordingPermissionState, .granted)
+        XCTAssertTrue(model.canContinueOnboarding)
+    }
+
+    func testOnboardingRefreshMarksAccessibilityGrantedAfterPermissionChanges() {
+        var isTrusted = false
+        let model = AppModel(
+            screenRecordingPermission: makeScreenRecordingPermission(isGranted: false),
+            accessibilityPermission: AccessibilityPermission(client: AccessibilityPermissionClient(
+                isTrusted: { isTrusted },
+                request: { isTrusted },
+                hasRequestedPrompt: { true },
+                setRequestedPrompt: { _ in }
+            )),
+            onboardingStore: OnboardingCompletionBox(false).store
+        )
+
+        XCTAssertEqual(model.accessibilityPermissionState, .requestAlreadyShown)
+
+        isTrusted = true
+        model.refreshOnboardingPermissionStates()
+
+        XCTAssertEqual(model.accessibilityPermissionState, .granted)
+    }
+
     func testHideHUDWindowCommandIsConsumedOnce() {
         let model = AppModel()
         model.hideHUD()
@@ -491,6 +604,24 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertEqual(dismissedWindows, ["hud", "source-selector"])
     }
 
+    func testAppWindowActionsCloseCaptureSetupClosesSelectorsWithoutHUD() {
+        let actions = AppWindowActions()
+        var openedWindows: [String] = []
+        var dismissedWindows: [String] = []
+
+        actions.install(
+            openWindow: { openedWindows.append($0) },
+            openEditor: { _ in },
+            dismissWindow: { dismissedWindows.append($0) },
+            activateApp: {}
+        )
+        actions.perform(NativeWindowCommand(action: .closeCaptureSetup))
+
+        XCTAssertTrue(openedWindows.isEmpty)
+        XCTAssertEqual(dismissedWindows, ["source-selector", "area-selector"])
+        XCTAssertFalse(dismissedWindows.contains("hud"))
+    }
+
     func testAppWindowActionsShowOnboardingClosesCaptureWindowsAndOpensOnboarding() {
         let actions = AppWindowActions()
         var openedWindows: [String] = []
@@ -560,4 +691,18 @@ private func makeAccessibilityPermission(isTrusted: Bool) -> AccessibilityPermis
         hasRequestedPrompt: { false },
         setRequestedPrompt: { _ in }
     ))
+}
+
+private func makeSource() -> CaptureSource {
+    CaptureSource(
+        id: "display:1",
+        kind: .display,
+        name: "Display 1",
+        subtitle: "Built-in",
+        displayIndex: 1,
+        displayID: nil,
+        windowID: nil,
+        area: nil,
+        thumbnailData: nil
+    )
 }

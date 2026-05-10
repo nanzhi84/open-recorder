@@ -67,10 +67,20 @@ jobs:
             --output "$GITHUB_OUTPUT"
 
   build-macos:
-    name: Build native macOS app
+    name: Build macOS app (${{ matrix.artifact_arch }})
     needs: resolve-release
     if: needs.resolve-release.outputs.should_release == 'true'
-    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact_arch: arm64
+            runner: macos-26
+            binary_arch: arm64
+          - artifact_arch: x64
+            runner: macos-26-intel
+            binary_arch: x86_64
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -81,16 +91,105 @@ jobs:
       - name: Package app bundle
         run: make package-macos
 
-      - name: Archive app bundle
+      - name: Verify native architecture
+        shell: bash
         run: |
-          mkdir -p release-upload
-          ditto -c -k --sequesterRsrc --keepParent "release/Open Recorder.app" "release-upload/open-recorder-macos.zip"
+          set -euo pipefail
+          expected="${{ matrix.binary_arch }}"
+          for binary in "OpenRecorderMac" "open-recorder-service"; do
+            archs=$(lipo -archs "release/Open Recorder.app/Contents/MacOS/${binary}")
+            echo "${binary}: ${archs}"
+            if [ "${archs}" != "${expected}" ]; then
+              echo "Expected ${binary} to contain only ${expected}, got: ${archs}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Create release artifacts
+        run: |
+          zsh scripts/create-macos-release-artifacts.zsh \
+            --app "release/Open Recorder.app" \
+            --output-dir release-upload \
+            --artifact-stem "open-recorder-macos-${{ matrix.artifact_arch }}"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-app
-          path: release-upload/open-recorder-macos.zip
+          name: macos-${{ matrix.artifact_arch }}-release-assets
+          path: |
+            release-upload/open-recorder-macos-${{ matrix.artifact_arch }}.zip
+            release-upload/open-recorder-macos-${{ matrix.artifact_arch }}.dmg
+          if-no-files-found: error
+
+  build-universal-macos:
+    name: Build universal macOS app
+    needs:
+      - resolve-release
+      - build-macos
+    if: needs.resolve-release.outputs.should_release == 'true'
+    runs-on: macos-26
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download arm64 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-arm64-release-assets
+          path: universal-input/arm64
+
+      - name: Download x64 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-x64-release-assets
+          path: universal-input/x64
+
+      - name: Merge app executables
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p universal-work/arm64 universal-work/x64 release-upload
+          ditto -x -k universal-input/arm64/open-recorder-macos-arm64.zip universal-work/arm64
+          ditto -x -k universal-input/x64/open-recorder-macos-x64.zip universal-work/x64
+          ditto "universal-work/arm64/Open Recorder.app" "universal-work/Open Recorder.app"
+
+          app="universal-work/Open Recorder.app"
+          arm_app="universal-work/arm64/Open Recorder.app"
+          x64_app="universal-work/x64/Open Recorder.app"
+
+          for binary in "OpenRecorderMac" "open-recorder-service"; do
+            lipo -create \
+              "${x64_app}/Contents/MacOS/${binary}" \
+              "${arm_app}/Contents/MacOS/${binary}" \
+              -output "${app}/Contents/MacOS/${binary}"
+            chmod +x "${app}/Contents/MacOS/${binary}"
+
+            archs=$(lipo -archs "${app}/Contents/MacOS/${binary}")
+            echo "${binary}: ${archs}"
+            if [[ "${archs}" != *"x86_64"* || "${archs}" != *"arm64"* ]]; then
+              echo "Expected ${binary} to contain x86_64 and arm64, got: ${archs}" >&2
+              exit 1
+            fi
+          done
+
+          find "$app" \( -name '._*' -o -name '.__CodeSignature' \) -delete
+          zsh scripts/sign-macos-app.zsh "$app"
+
+          zsh scripts/create-macos-release-artifacts.zsh \
+            --app "$app" \
+            --output-dir release-upload \
+            --artifact-stem open-recorder-macos-universal
+          cp release-upload/open-recorder-macos-universal.zip release-upload/open-recorder-macos.zip
+
+      - name: Upload universal macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal-release-assets
+          path: |
+            release-upload/open-recorder-macos-universal.zip
+            release-upload/open-recorder-macos-universal.dmg
+            release-upload/open-recorder-macos.zip
           if-no-files-found: error
 
   publish-release:
@@ -98,6 +197,7 @@ jobs:
     needs:
       - resolve-release
       - build-macos
+      - build-universal-macos
     if: needs.resolve-release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -108,8 +208,27 @@ jobs:
 
       - name: Prepare release assets
         run: |
+          set -euo pipefail
           mkdir -p release-upload
-          cp release-assets/macos-app/open-recorder-macos.zip release-upload/open-recorder-macos.zip
+          find release-assets -type f \( -name 'open-recorder-macos.zip' -o -name 'open-recorder-macos-*.zip' -o -name 'open-recorder-macos-*.dmg' \) -exec cp {} release-upload/ \;
+
+          expected_assets=(
+            open-recorder-macos-arm64.zip
+            open-recorder-macos-arm64.dmg
+            open-recorder-macos-x64.zip
+            open-recorder-macos-x64.dmg
+            open-recorder-macos-universal.zip
+            open-recorder-macos-universal.dmg
+            open-recorder-macos.zip
+          )
+
+          for asset in "${expected_assets[@]}"; do
+            if [ ! -f "release-upload/${asset}" ]; then
+              echo "Missing release asset: ${asset}" >&2
+              find release-assets -type f >&2
+              exit 1
+            fi
+          done
 
       - name: Create or update release
         uses: ncipollo/release-action@v1

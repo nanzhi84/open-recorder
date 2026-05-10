@@ -9,11 +9,13 @@ struct VideoExportDialog: View {
     var errorMessage: String?
     var exportedFileName: String?
     var isExporting: Bool
+    var initialOptions: VideoExportOptions = .default
     var onExport: (VideoExportOptions) -> Void
     var onRetrySave: () -> Void
     var onShowInFinder: () -> Void
     var onCancelExport: () -> Void
     var onClose: () -> Void
+    @State private var didApplyInitialOptions = false
 
     private var canEditOptions: Bool {
         phase == .idle || phase == .failed
@@ -36,6 +38,13 @@ struct VideoExportDialog: View {
         }
         .padding(18)
         .background(Color.studioPanel)
+        .onAppear {
+            guard !didApplyInitialOptions else { return }
+            resolution = initialOptions.resolution
+            format = initialOptions.format
+            frameRate = initialOptions.frameRate
+            didApplyInitialOptions = true
+        }
     }
 
     private var header: some View {
@@ -65,7 +74,7 @@ struct VideoExportDialog: View {
             ExportSelectField(
                 title: "Resolution",
                 selection: $resolution,
-                options: VideoExportResolution.allCases,
+                options: resolutionOptions,
                 optionTitle: \.title,
                 optionDetail: \.detail,
                 isDisabled: !canEditOptions
@@ -173,7 +182,16 @@ struct VideoExportDialog: View {
     private var primaryActions: some View {
         VStack(spacing: 8) {
             Button {
-                onExport(VideoExportOptions(resolution: resolution, format: format, frameRate: frameRate, styling: .none))
+                onExport(VideoExportOptions(
+                    resolution: resolution,
+                    format: format,
+                    frameRate: frameRate,
+                    styling: .none,
+                    cropSelection: initialOptions.cropSelection,
+                    customOutputSize: resolution == .custom ? initialOptions.customOutputSize : nil,
+                    cursorOverlay: initialOptions.cursorOverlay,
+                    cursorTelemetryURL: initialOptions.cursorTelemetryURL
+                ))
             } label: {
                 Label(isExporting ? "Exporting…" : "Export", systemImage: "square.and.arrow.down")
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -206,6 +224,13 @@ struct VideoExportDialog: View {
         case .savePending, .failed: "exclamationmark.triangle"
         case .exporting, .saving, .idle: "arrow.down.circle"
         }
+    }
+
+    private var resolutionOptions: [VideoExportResolution] {
+        if initialOptions.customOutputSize != nil {
+            return VideoExportResolution.allCases
+        }
+        return VideoExportResolution.allCases.filter { $0 != .custom }
     }
 
     private var headerTitle: String {

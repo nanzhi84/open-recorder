@@ -43,21 +43,12 @@ final class NativeScreenRecorder: NSObject {
         let content = try await shareableContent()
         let filterAndSize = try makeFilter(for: source, from: content)
 
-        let configuration = SCStreamConfiguration()
-        configuration.width = filterAndSize.width
-        configuration.height = filterAndSize.height
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60)
-        configuration.queueDepth = 8
-        configuration.showsCursor = options.showCursor
-        configuration.capturesAudio = options.includeSystemAudio
-        configuration.captureMicrophone = options.includeMicrophone
-        configuration.microphoneCaptureDeviceID = options.microphoneDeviceID
-        configuration.shouldBeOpaque = true
-        configuration.captureDynamicRange = .SDR
-        configuration.showMouseClicks = options.showClicks
-        if let sourceRect = filterAndSize.sourceRect {
-            configuration.sourceRect = sourceRect
-        }
+        let configuration = Self.makeStreamConfiguration(
+            width: filterAndSize.width,
+            height: filterAndSize.height,
+            sourceRect: filterAndSize.sourceRect,
+            options: options
+        )
 
         let outputConfiguration = SCRecordingOutputConfiguration()
         outputConfiguration.outputURL = outputURL
@@ -83,6 +74,33 @@ final class NativeScreenRecorder: NSObject {
 
         try await startCapture(stream)
         try await recordingDelegate.waitForStart()
+    }
+
+    static func makeStreamConfiguration(
+        width: Int,
+        height: Int,
+        sourceRect: CGRect?,
+        options: RecordingCaptureOptions
+    ) -> SCStreamConfiguration {
+        let configuration = SCStreamConfiguration()
+        configuration.width = width
+        configuration.height = height
+        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60)
+        configuration.queueDepth = 8
+        configuration.showsCursor = false
+        configuration.capturesAudio = options.includeSystemAudio
+        configuration.sampleRate = 48_000
+        configuration.channelCount = 2
+        configuration.excludesCurrentProcessAudio = false
+        configuration.captureMicrophone = options.includeMicrophone
+        configuration.microphoneCaptureDeviceID = options.includeMicrophone ? options.microphoneDeviceID : nil
+        configuration.shouldBeOpaque = true
+        configuration.captureDynamicRange = .SDR
+        configuration.showMouseClicks = options.showClicks
+        if let sourceRect {
+            configuration.sourceRect = sourceRect
+        }
+        return configuration
     }
 
     func stop() async throws {

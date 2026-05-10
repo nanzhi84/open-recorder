@@ -188,12 +188,16 @@ fn handle_method(method: &str, params: Value) -> Result<Value, String> {
                     .unwrap_or("Recording")
                     .to_string()
             });
+            let editor_state = params
+                .get("editorState")
+                .cloned()
+                .unwrap_or_else(|| json!({ "timelineEdits": { "zoomRegions": [], "trimRegions": [], "annotationRegions": [], "clipSplitTimes": [], "clipSpeeds": {} } }));
             let summary = save_project_document(
                 &paths,
                 &title,
                 Some(recording_path),
                 source_name,
-                json!({ "timeline": [], "annotations": [], "exportPreset": "source" }),
+                editor_state,
             )?;
             Ok(serde_json::to_value(summary).map_err(|err| err.to_string())?)
         }

@@ -68,6 +68,13 @@ final class TimelineAudioWaveformTests: XCTestCase {
         XCTAssertEqual(ticks.map(\.label), ["", "1s", "2s", "3s", "4s", "5s", "6s", "7s"])
     }
 
+    func testHalfSecondTicksAreUnlabeled() {
+        let ticks = TimelineRulerTickBuilder.halfSecondTicks(duration: 3)
+
+        XCTAssertEqual(ticks.map(\.time), [0.5, 1.5, 2.5])
+        XCTAssertEqual(ticks.map(\.label), ["", "", ""])
+    }
+
     func testLongTimelineTicksUseClockLabels() {
         let ticks = TimelineRulerTickBuilder.ticks(duration: 60, maxTickCount: 8)
 
@@ -76,11 +83,127 @@ final class TimelineAudioWaveformTests: XCTestCase {
     }
 }
 
+final class TimelineSeekMapperTests: XCTestCase {
+    func testMidpointMapsToHalfDuration() {
+        XCTAssertEqual(TimelineSeekMapper.time(forX: 50, duration: 10, width: 100) ?? -1, 5, accuracy: 0.001)
+    }
+
+    func testNegativeXClampsToStart() {
+        XCTAssertEqual(TimelineSeekMapper.time(forX: -20, duration: 10, width: 100) ?? -1, 0, accuracy: 0.001)
+    }
+
+    func testXBeyondWidthClampsToDuration() {
+        XCTAssertEqual(TimelineSeekMapper.time(forX: 140, duration: 10, width: 100) ?? -1, 10, accuracy: 0.001)
+    }
+
+    func testInvalidDurationOrWidthReturnsNil() {
+        XCTAssertNil(TimelineSeekMapper.time(forX: 50, duration: 0, width: 100))
+        XCTAssertNil(TimelineSeekMapper.time(forX: 50, duration: 10, width: 0))
+        XCTAssertNil(TimelineSeekMapper.time(forX: 50, duration: .nan, width: 100))
+        XCTAssertNil(TimelineSeekMapper.time(forX: .infinity, duration: 10, width: 100))
+    }
+
+    func testViewportMappingUsesVisibleWindow() {
+        let viewport = TimelineViewport(duration: 100, visibleStart: 20, visibleDuration: 10)
+
+        XCTAssertEqual(TimelineSeekMapper.time(forX: 50, viewport: viewport, width: 100) ?? -1, 25, accuracy: 0.001)
+        XCTAssertEqual(TimelineSeekMapper.time(forX: -20, viewport: viewport, width: 100) ?? -1, 20, accuracy: 0.001)
+        XCTAssertEqual(TimelineSeekMapper.time(forX: 140, viewport: viewport, width: 100) ?? -1, 30, accuracy: 0.001)
+        XCTAssertEqual(TimelineSeekMapper.x(forTime: 30, viewport: viewport, width: 100) ?? -1, 100, accuracy: 0.001)
+    }
+}
+
+final class TimelineViewportTests: XCTestCase {
+    func testFullDurationViewportTracksDurationShrink() {
+        let viewport = TimelineViewport.reconciled(
+            duration: 50,
+            previous: TimelineViewport(duration: 100),
+            currentTime: 10
+        )
+
+        XCTAssertEqual(viewport.duration, 50, accuracy: 0.001)
+        XCTAssertEqual(viewport.visibleDuration, 50, accuracy: 0.001)
+        XCTAssertEqual(viewport.visibleStart, 0, accuracy: 0.001)
+    }
+
+    func testZoomedVisibleDurationPersistsAcrossDurationChange() {
+        let viewport = TimelineViewport.reconciled(
+            duration: 50,
+            previous: TimelineViewport(duration: 100, visibleStart: 30, visibleDuration: 20),
+            currentTime: 35
+        )
+
+        XCTAssertEqual(viewport.duration, 50, accuracy: 0.001)
+        XCTAssertEqual(viewport.visibleDuration, 20, accuracy: 0.001)
+        XCTAssertEqual(viewport.visibleStart, 30, accuracy: 0.001)
+    }
+
+    func testShortDurationDisablesZoomAndUsesFullDuration() {
+        let viewport = TimelineViewport.reconciled(
+            duration: 1.5,
+            previous: TimelineViewport(duration: 100, visibleStart: 30, visibleDuration: 20),
+            currentTime: 1
+        )
+
+        XCTAssertFalse(viewport.isZoomEnabled)
+        XCTAssertEqual(viewport.visibleDuration, 1.5, accuracy: 0.001)
+        XCTAssertEqual(viewport.visibleStart, 0, accuracy: 0.001)
+    }
+
+    func testViewportStartClampsNearEnd() {
+        let viewport = TimelineViewport(duration: 100, visibleStart: 95, visibleDuration: 20)
+
+        XCTAssertEqual(viewport.visibleStart, 80, accuracy: 0.001)
+        XCTAssertEqual(viewport.visibleEnd, 100, accuracy: 0.001)
+    }
+}
+
+final class VideoPlaybackControllerPreviewSpeedTests: XCTestCase {
+    @MainActor
+    func testPreviewPlaybackSpeedCyclesThroughPreviewRates() {
+        let playback = VideoPlaybackController()
+
+        XCTAssertEqual(playback.previewPlaybackSpeed, 1)
+        playback.cyclePreviewPlaybackSpeed()
+        XCTAssertEqual(playback.previewPlaybackSpeed, 2)
+        playback.cyclePreviewPlaybackSpeed()
+        XCTAssertEqual(playback.previewPlaybackSpeed, 4)
+        playback.cyclePreviewPlaybackSpeed()
+        XCTAssertEqual(playback.previewPlaybackSpeed, 8)
+        playback.cyclePreviewPlaybackSpeed()
+        XCTAssertEqual(playback.previewPlaybackSpeed, 1)
+    }
+
+    @MainActor
+    func testPreviewPlaybackSpeedMultipliesClipSpeedEdits() {
+        let playback = VideoPlaybackController()
+        playback.duration = 8
+        playback.previewPlaybackSpeed = 2
+        playback.setTimelineEdits(TimelineEditSnapshot(clipSplitTimes: [4], clipSpeeds: [1: 1.5]))
+
+        XCTAssertEqual(playback.effectivePlaybackRate(at: 5), 3, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testPreviewPlaybackSpeedResetsOnLoadAndClear() {
+        let playback = VideoPlaybackController()
+        playback.previewPlaybackSpeed = 8
+
+        playback.load(url: URL(fileURLWithPath: "/tmp/open-recorder-preview-speed-reset.mov"))
+        XCTAssertEqual(playback.previewPlaybackSpeed, 1)
+
+        playback.previewPlaybackSpeed = 4
+        playback.clear()
+        XCTAssertEqual(playback.previewPlaybackSpeed, 1)
+    }
+}
+
 final class TimelineEditingPlanTests: XCTestCase {
     func testExportPlanDropsTrimmedRangesAndRetimesSpeed() {
         let edits = TimelineEditSnapshot(
             trimRegions: [TimelineTrimRegion(span: TimelineSpan(start: 2, end: 3))],
-            speedRegions: [TimelineSpeedRegion(span: TimelineSpan(start: 4, end: 6), speed: 2)]
+            clipSplitTimes: [4, 6],
+            clipSpeeds: [1: 2]
         )
 
         let plan = TimelineExportEditPlan.build(duration: 8, edits: edits)
@@ -103,6 +226,16 @@ final class TimelineEditingPlanTests: XCTestCase {
         XCTAssertEqual(plan.outputDuration, 5, accuracy: 0.001)
     }
 
+    func testExportPlanRetimesInitialClipSpeedWithoutSplits() {
+        let edits = TimelineEditSnapshot(clipSpeeds: [0: 2])
+
+        let plan = TimelineExportEditPlan.build(duration: 8, edits: edits)
+
+        XCTAssertEqual(plan.segments.count, 1)
+        XCTAssertEqual(plan.segments[0].speed, 2, accuracy: 0.001)
+        XCTAssertEqual(plan.outputDuration, 4, accuracy: 0.001)
+    }
+
     @MainActor
     func testClipSplitUsesPlayheadAndDeduplicatesNearbySplits() {
         let edits = TimelineEditController()
@@ -112,6 +245,17 @@ final class TimelineEditingPlanTests: XCTestCase {
 
         XCTAssertEqual(edits.clipSplitTimes.count, 1)
         XCTAssertEqual(edits.clipSplitTimes[0], 3, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testAddingTrimRegionIsDisabled() {
+        let edits = TimelineEditController()
+
+        edits.add(.trim, at: 3, duration: 10)
+
+        XCTAssertTrue(edits.trimRegions.isEmpty)
+        XCTAssertNil(edits.selectedKind)
+        XCTAssertEqual(edits.statusMessage, "Use clip splitting instead of trim sections.")
     }
 
     @MainActor
@@ -133,11 +277,134 @@ final class TimelineEditingPlanTests: XCTestCase {
         edits.clipSplitTimes = [2, 4]
         edits.selectClip(index: 1)
 
-        edits.removeClipSplit(at: 2)
+        edits.removeClipSplit(at: 2, duration: 8)
 
         XCTAssertEqual(edits.clipSplitTimes, [4])
         XCTAssertNil(edits.selectedClipIndex)
         XCTAssertFalse(edits.hasSelection)
+    }
+
+    @MainActor
+    func testSplittingClipCopiesSpeedToBothSlices() {
+        let edits = TimelineEditController()
+        edits.updateClipSpeed(index: 0, speed: 1.5)
+
+        edits.addClipSplit(at: 3, duration: 8)
+
+        let segments = edits.snapshot.clipSegments(duration: 8)
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertEqual(segments[0].speed, 1.5, accuracy: 0.001)
+        XCTAssertEqual(segments[1].speed, 1.5, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testUndoRedoAddedZoomRegion() {
+        let edits = TimelineEditController()
+
+        edits.add(.zoom, at: 2, duration: 10)
+
+        XCTAssertEqual(edits.zoomRegions.count, 1)
+        XCTAssertTrue(edits.canUndo)
+
+        edits.undo()
+
+        XCTAssertTrue(edits.zoomRegions.isEmpty)
+        XCTAssertFalse(edits.canUndo)
+        XCTAssertTrue(edits.canRedo)
+
+        edits.redo()
+
+        XCTAssertEqual(edits.zoomRegions.count, 1)
+    }
+
+    @MainActor
+    func testUndoRedoClipSplitAndMerge() {
+        let edits = TimelineEditController()
+
+        edits.addClipSplit(at: 2, duration: 8)
+        XCTAssertEqual(edits.clipSplitTimes, [2])
+
+        edits.undo()
+        XCTAssertTrue(edits.clipSplitTimes.isEmpty)
+
+        edits.redo()
+        XCTAssertEqual(edits.clipSplitTimes, [2])
+
+        edits.removeClipSplit(at: 2, duration: 8)
+        XCTAssertTrue(edits.clipSplitTimes.isEmpty)
+
+        edits.undo()
+        XCTAssertEqual(edits.clipSplitTimes, [2])
+    }
+
+    @MainActor
+    func testUndoRedoDeleteResetZoomDepthAndClipSpeed() {
+        let edits = TimelineEditController()
+        edits.add(.zoom, at: 1, duration: 8)
+        let zoomID = edits.zoomRegions[0].id
+        edits.addClipSplit(at: 4, duration: 8)
+        edits.selectClip(index: 0)
+        edits.updateClipSpeed(index: 0, speed: 1.5)
+
+        edits.undo()
+        XCTAssertEqual(edits.clipSpeed(index: 0), 1.0)
+
+        edits.redo()
+        XCTAssertEqual(edits.clipSpeed(index: 0), 1.5)
+
+        edits.updateZoomDepth(id: zoomID, depth: 3.5)
+        XCTAssertEqual(edits.zoomRegions[0].depth, 3.5, accuracy: 0.001)
+
+        edits.undo()
+        XCTAssertEqual(edits.zoomRegions[0].depth, 1.8, accuracy: 0.001)
+
+        edits.select(.zoom, id: zoomID)
+        edits.deleteSelection()
+        XCTAssertTrue(edits.zoomRegions.isEmpty)
+
+        edits.undo()
+        XCTAssertEqual(edits.zoomRegions.count, 1)
+
+        edits.reset()
+        XCTAssertFalse(edits.snapshot.hasEdits)
+
+        edits.undo()
+        XCTAssertTrue(edits.snapshot.hasEdits)
+    }
+
+    @MainActor
+    func testTimelineTransactionCollapsesSpanUpdatesIntoOneUndoStep() {
+        let edits = TimelineEditController()
+        edits.add(.zoom, at: 1, duration: 8)
+        let zoomID = edits.zoomRegions[0].id
+        let originalSpan = edits.zoomRegions[0].span
+        edits.resetHistory()
+
+        edits.beginUndoTransaction()
+        edits.updateSpan(kind: .zoom, id: zoomID, span: TimelineSpan(start: 2, end: 3), duration: 8)
+        edits.updateSpan(kind: .zoom, id: zoomID, span: TimelineSpan(start: 3, end: 4), duration: 8)
+        edits.endUndoTransaction()
+
+        XCTAssertTrue(edits.canUndo)
+        XCTAssertEqual(edits.zoomRegions[0].span, TimelineSpan(start: 3, end: 4))
+
+        edits.undo()
+
+        XCTAssertEqual(edits.zoomRegions[0].span, originalSpan)
+        XCTAssertFalse(edits.canUndo)
+        XCTAssertTrue(edits.canRedo)
+    }
+
+    @MainActor
+    func testRedoIsClearedAfterNewTimelineEdit() {
+        let edits = TimelineEditController()
+        edits.add(.zoom, at: 1, duration: 8)
+        edits.undo()
+        XCTAssertTrue(edits.canRedo)
+
+        edits.addClipSplit(at: 3, duration: 8)
+
+        XCTAssertFalse(edits.canRedo)
     }
 
     @MainActor
@@ -153,12 +420,16 @@ final class TimelineEditingPlanTests: XCTestCase {
 
     func testSnapshotReturnsActiveRegions() {
         let zoom = TimelineZoomRegion(span: TimelineSpan(start: 1, end: 2), depth: 2.2)
-        let speed = TimelineSpeedRegion(span: TimelineSpan(start: 3, end: 4), speed: 1.5)
         let annotation = TimelineAnnotationRegion(span: TimelineSpan(start: 1.5, end: 3.5), text: "Hello")
-        let edits = TimelineEditSnapshot(zoomRegions: [zoom], annotationRegions: [annotation], speedRegions: [speed])
+        let edits = TimelineEditSnapshot(
+            zoomRegions: [zoom],
+            annotationRegions: [annotation],
+            clipSplitTimes: [3, 4],
+            clipSpeeds: [1: 1.5]
+        )
 
         XCTAssertEqual(edits.activeZoom(at: 1.25)?.depth, 2.2)
-        XCTAssertEqual(edits.activeSpeed(at: 3.25)?.speed, 1.5)
+        XCTAssertEqual(edits.activeSpeed(at: 3.25, duration: 6), 1.5)
         XCTAssertEqual(edits.annotations(at: 2).first?.text, "Hello")
         XCTAssertNil(edits.activeZoom(at: 2.5))
     }

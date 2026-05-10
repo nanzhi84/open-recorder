@@ -23,6 +23,11 @@ final class AppModel: ObservableObject {
     @Published var includeCamera = false
     @Published var showCursor = true
     @Published var showClicks = false
+    @Published var createZoomsAutomatically: Bool {
+        didSet {
+            UserDefaults.standard.set(createZoomsAutomatically, forKey: Self.createZoomsAutomaticallyDefaultsKey)
+        }
+    }
     @Published var microphoneDevices: [CaptureDeviceInfo] = []
     @Published var cameraDevices: [CaptureDeviceInfo] = []
     @Published var selectedMicrophoneDeviceID: String?
@@ -64,12 +69,14 @@ final class AppModel: ObservableObject {
     private let facecamRecorder = FacecamRecorder()
     private let cursorTelemetryRecorder = CursorTelemetryRecorder()
     private let captureDeviceProvider = CaptureDeviceProvider()
+    private static let createZoomsAutomaticallyDefaultsKey = "recording.createZoomsAutomatically"
 
     init(
         screenRecordingPermission: ScreenRecordingPermission = ScreenRecordingPermission(),
         accessibilityPermission: AccessibilityPermission = AccessibilityPermission(),
         onboardingStore: OnboardingStateStore = .live
     ) {
+        self.createZoomsAutomatically = UserDefaults.standard.object(forKey: Self.createZoomsAutomaticallyDefaultsKey) as? Bool ?? true
         self.screenRecordingPermission = screenRecordingPermission
         self.accessibilityPermission = accessibilityPermission
         self.onboardingStore = onboardingStore
@@ -86,6 +93,10 @@ final class AppModel: ObservableObject {
         hudState.presentation.isVisible
     }
 
+    var canChangeRecordingOptions: Bool {
+        recordingPhase == .idle && !capture.isRecording
+    }
+
     func bootstrap() {
         presentOnboardingIfNeeded()
         Task {
@@ -100,8 +111,17 @@ final class AppModel: ObservableObject {
     }
 
     func refreshOnboardingPermissionStates() {
-        screenRecordingPermissionState = screenRecordingPermission.currentState()
-        accessibilityPermissionState = accessibilityPermission.currentState()
+        let nextScreenRecordingPermissionState = screenRecordingPermission.currentState()
+        let nextAccessibilityPermissionState = accessibilityPermission.currentState()
+
+        if screenRecordingPermissionState != nextScreenRecordingPermissionState {
+            screenRecordingPermissionState = nextScreenRecordingPermissionState
+        }
+
+        if accessibilityPermissionState != nextAccessibilityPermissionState {
+            accessibilityPermissionState = nextAccessibilityPermissionState
+        }
+
         if canContinueOnboarding && onboardingStatusMessage.localizedCaseInsensitiveContains("required") {
             onboardingStatusMessage = ""
         }
@@ -334,7 +354,6 @@ final class AppModel: ObservableObject {
         isAreaSelectionActive = false
         setHUDPhase(.choosingMode)
         statusMessage = "Ready"
-        requestWindow(.closeAreaSelector)
     }
 
     func requestWindow(_ action: NativeWindowCommandAction, editorSession: EditorSession? = nil) {
@@ -387,7 +406,31 @@ final class AppModel: ObservableObject {
     }
 
     private func setHUDPhase(_ phase: HUDPhase) {
+        let previousPhase = hudState.phase
         hudState = hudState.withPhase(phase)
+
+        if shouldCloseCaptureSetup(from: previousPhase, to: phase) {
+            requestWindow(.closeCaptureSetup)
+        }
+    }
+
+    private func shouldCloseCaptureSetup(from previousPhase: HUDPhase, to nextPhase: HUDPhase) -> Bool {
+        guard case .choosingMode = nextPhase else {
+            return false
+        }
+
+        switch previousPhase {
+        case .selectingSource, .ready, .areaSelecting:
+            return true
+        case .idle,
+             .choosingMode,
+             .countingDownRecording,
+             .startingRecording,
+             .recording,
+             .stoppingRecording,
+             .capturingScreenshot:
+            return false
+        }
     }
 
     func toggleRecordingShortcut() {
@@ -563,6 +606,10 @@ final class AppModel: ObservableObject {
                 currentScreenshotURL = nil
 
                 if FileManager.default.fileExists(atPath: outputURL.path) {
+                    let timelineEdits = await initialTimelineEdits(
+                        videoURL: outputURL,
+                        cursorTelemetryURL: cursorTelemetryURL
+                    )
                     let recordingSession = RecordingSessionBuilder.build(
                         screenVideoURL: outputURL,
                         facecamURL: stoppedFacecamURL ?? activeFacecamURL,
@@ -577,7 +624,8 @@ final class AppModel: ObservableObject {
                         params: [
                             "path": outputURL.path,
                             "sourceName": selectedSource?.name ?? "Screen Recording",
-                            "title": outputURL.deletingPathExtension().lastPathComponent
+                            "title": outputURL.deletingPathExtension().lastPathComponent,
+                            "editorState": jsonObject(for: ProjectEditorState(timelineEdits: timelineEdits)) ?? [:]
                         ],
                         as: ProjectSummary.self
                     )
@@ -586,7 +634,8 @@ final class AppModel: ObservableObject {
                         kind: .video,
                         url: outputURL,
                         title: summary.title,
-                        recordingSession: recordingSession
+                        recordingSession: recordingSession,
+                        timelineEditSnapshot: timelineEdits
                     ))
                     statusMessage = "Saved \(summary.title)"
                 } else {
@@ -642,15 +691,7 @@ final class AppModel: ObservableObject {
     }
 
     func openProject(_ project: ProjectSummary) {
-        if let recordingPath = project.recordingPath {
-            let recordingURL = URL(fileURLWithPath: recordingPath)
-            currentVideoURL = recordingURL
-            currentScreenshotURL = nil
-            showEditor(for: EditorSession(kind: .video, url: recordingURL, title: project.title))
-            statusMessage = "Opened \(project.title)"
-        } else {
-            statusMessage = "Project has no recording path."
-        }
+        openProjectFile(at: URL(fileURLWithPath: project.path))
     }
 
     func openProjectFile() {
@@ -679,7 +720,12 @@ final class AppModel: ObservableObject {
                 let recordingURL = URL(fileURLWithPath: recordingPath)
                 currentVideoURL = recordingURL
                 currentScreenshotURL = nil
-                showEditor(for: EditorSession(kind: .video, url: recordingURL, title: document.title))
+                showEditor(for: EditorSession(
+                    kind: .video,
+                    url: recordingURL,
+                    title: document.title,
+                    timelineEditSnapshot: document.editorState?.timelineEdits
+                ))
                 statusMessage = "Opened \(document.title)"
                 refreshBackendState()
             } else {
@@ -880,6 +926,29 @@ final class AppModel: ObservableObject {
         exportedVideoURL = nil
     }
 
+    private func initialTimelineEdits(videoURL: URL, cursorTelemetryURL: URL?) async -> TimelineEditSnapshot {
+        guard createZoomsAutomatically, let cursorTelemetryURL else {
+            return .empty
+        }
+
+        let duration = await videoDuration(for: videoURL)
+        let zooms = AutoZoomGenerator.generate(from: cursorTelemetryURL, duration: duration)
+        return TimelineEditSnapshot(zoomRegions: zooms)
+    }
+
+    private func videoDuration(for url: URL) async -> Double {
+        let asset = AVURLAsset(url: url)
+        let duration = try? await asset.load(.duration)
+        let seconds = duration?.seconds ?? 0
+        return seconds.isFinite && seconds > 0 ? seconds : 0
+    }
+
+    private func jsonObject<T: Encodable>(for value: T) -> Any? {
+        let encoder = JSONEncoder()
+        guard let data = try? encoder.encode(value) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data)
+    }
+
     private func cancelVideoExportTask() {
         videoExportTask?.cancel()
         videoExportTask = nil
@@ -895,7 +964,14 @@ final class AppModel: ObservableObject {
 
     private func suggestedVideoExportFileName(for sourceURL: URL, options: VideoExportOptions) -> String {
         let baseName = sourceURL.deletingPathExtension().lastPathComponent
-        let suffix = "\(options.resolution.fileSuffix)-\(options.frameRate.fileSuffix)"
+        let resolutionSuffix: String
+        if options.resolution == .custom, let customOutputSize = options.customOutputSize {
+            resolutionSuffix = "\(Int(customOutputSize.width.rounded()))x\(Int(customOutputSize.height.rounded()))"
+        } else {
+            resolutionSuffix = options.resolution.fileSuffix
+        }
+        let cropSuffix = options.cropSelection == nil ? "" : "-crop"
+        let suffix = "\(resolutionSuffix)\(cropSuffix)-\(options.frameRate.fileSuffix)"
         return "\(baseName)-\(suffix).\(options.format.fileExtension)"
     }
 
@@ -984,6 +1060,16 @@ final class AppModel: ObservableObject {
     func disableMicrophone() {
         includeMicrophone = false
         statusMessage = "Microphone off"
+    }
+
+    func toggleSystemAudio() {
+        guard canChangeRecordingOptions else {
+            statusMessage = includeSystemAudio ? "System audio is on for this recording." : "System audio is off for this recording."
+            return
+        }
+
+        includeSystemAudio.toggle()
+        statusMessage = includeSystemAudio ? "System audio on" : "System audio off"
     }
 
     func disableCamera() {

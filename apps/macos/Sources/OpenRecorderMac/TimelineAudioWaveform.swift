@@ -28,6 +28,70 @@ enum TimelineRulerTickBuilder {
         return ticks
     }
 
+    static func ticks(visibleStart: Double, visibleDuration: Double, totalDuration: Double, maxTickCount: Int = 8) -> [TimelineRulerTick] {
+        let safeVisibleStart = visibleStart.isFinite && visibleStart > 0 ? visibleStart : 0
+        let safeVisibleDuration = visibleDuration.isFinite && visibleDuration > 0 ? visibleDuration : 6
+        let safeTotalDuration = totalDuration.isFinite && totalDuration > 0 ? totalDuration : safeVisibleDuration
+        let safeTickCount = max(maxTickCount, 2)
+        let step = tickStep(for: safeVisibleDuration, maxTickCount: safeTickCount)
+        let visibleEnd = min(safeTotalDuration, safeVisibleStart + safeVisibleDuration)
+        var ticks: [TimelineRulerTick] = []
+        var time = (safeVisibleStart / step).rounded(.up) * step
+
+        if abs(time) < 0.0001 {
+            time = 0
+        }
+
+        while time <= visibleEnd + 0.0001 {
+            if time >= safeVisibleStart - 0.0001 {
+                ticks.append(TimelineRulerTick(time: time, label: label(for: time, duration: safeTotalDuration)))
+            }
+            time += step
+        }
+
+        if safeVisibleStart <= 0.0001, ticks.first?.time != 0 {
+            ticks.insert(TimelineRulerTick(time: 0, label: label(for: 0, duration: safeTotalDuration)), at: 0)
+        }
+
+        if visibleEnd >= safeTotalDuration - 0.0001,
+           ticks.last.map({ abs($0.time - safeTotalDuration) > 0.0001 }) ?? true {
+            ticks.append(TimelineRulerTick(time: safeTotalDuration, label: label(for: safeTotalDuration, duration: safeTotalDuration)))
+        }
+
+        return ticks
+    }
+
+    static func halfSecondTicks(duration: Double) -> [TimelineRulerTick] {
+        let safeDuration = duration.isFinite && duration > 0 ? duration : 6
+        var ticks: [TimelineRulerTick] = []
+        var time = 0.5
+
+        while time < safeDuration - 0.0001 {
+            ticks.append(TimelineRulerTick(time: time, label: ""))
+            time += 1
+        }
+
+        return ticks
+    }
+
+    static func halfSecondTicks(visibleStart: Double, visibleDuration: Double, totalDuration: Double) -> [TimelineRulerTick] {
+        let safeVisibleStart = visibleStart.isFinite && visibleStart > 0 ? visibleStart : 0
+        let safeVisibleDuration = visibleDuration.isFinite && visibleDuration > 0 ? visibleDuration : 6
+        let safeTotalDuration = totalDuration.isFinite && totalDuration > 0 ? totalDuration : safeVisibleDuration
+        let visibleEnd = min(safeTotalDuration, safeVisibleStart + safeVisibleDuration)
+        var ticks: [TimelineRulerTick] = []
+        var time = (safeVisibleStart - 0.5).rounded(.up) + 0.5
+
+        while time < visibleEnd - 0.0001 {
+            if time >= safeVisibleStart + 0.0001 {
+                ticks.append(TimelineRulerTick(time: time, label: ""))
+            }
+            time += 1
+        }
+
+        return ticks
+    }
+
     private static func tickStep(for duration: Double, maxTickCount: Int) -> Double {
         let preferredSteps: [Double] = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600]
 

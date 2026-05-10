@@ -195,11 +195,20 @@ struct CaptureHUD: View {
 
     @ViewBuilder
     private var captureToggles: some View {
-        HUDToggle(symbolName: model.includeSystemAudio ? "speaker.wave.2.fill" : "speaker.slash.fill", isActive: model.includeSystemAudio, title: "System Audio") {
-            model.includeSystemAudio.toggle()
-        }
+        systemAudioToggle
         microphoneToggle
         cameraToggle
+    }
+
+    private var systemAudioToggle: some View {
+        HUDToggle(
+            symbolName: model.includeSystemAudio ? "speaker.wave.2.fill" : "speaker.slash.fill",
+            isActive: model.includeSystemAudio,
+            title: model.includeSystemAudio ? "System Audio On" : "System Audio Off",
+            isDisabled: !model.canChangeRecordingOptions
+        ) {
+            model.toggleSystemAudio()
+        }
     }
 
     @ViewBuilder
@@ -207,7 +216,8 @@ struct CaptureHUD: View {
         let button = HUDToggle(
             symbolName: model.includeMicrophone ? "mic.fill" : "mic.slash.fill",
             isActive: model.includeMicrophone,
-            title: "Microphone"
+            title: model.includeMicrophone ? "Microphone On" : "Microphone Off",
+            isDisabled: !model.canChangeRecordingOptions
         ) {
             if model.includeMicrophone {
                 model.disableMicrophone()
@@ -216,7 +226,7 @@ struct CaptureHUD: View {
             }
         }
 
-        if model.includeMicrophone {
+        if model.includeMicrophone && model.canChangeRecordingOptions {
             button.contextMenu {
                 Button("Microphone: \(model.selectedMicrophoneDeviceName)") {}
                     .disabled(true)
@@ -235,7 +245,8 @@ struct CaptureHUD: View {
         let button = HUDToggle(
             symbolName: model.includeCamera ? "video.fill" : "video.slash.fill",
             isActive: model.includeCamera,
-            title: "Camera"
+            title: model.includeCamera ? "Camera On" : "Camera Off",
+            isDisabled: !model.canChangeRecordingOptions
         ) {
             if model.includeCamera {
                 model.disableCamera()
@@ -244,7 +255,7 @@ struct CaptureHUD: View {
             }
         }
 
-        if model.includeCamera {
+        if model.includeCamera && model.canChangeRecordingOptions {
             button.contextMenu {
                 Button("Camera: \(model.selectedCameraDeviceName)") {}
                     .disabled(true)
@@ -261,8 +272,9 @@ struct CaptureHUD: View {
     private var narrowCaptureOptionsMenu: some View {
         StudioMenu(hitTarget: .circle, help: "Capture Options") {
             Button(model.includeSystemAudio ? "Turn Off System Audio" : "Turn On System Audio") {
-                model.includeSystemAudio.toggle()
+                model.toggleSystemAudio()
             }
+            .disabled(!model.canChangeRecordingOptions)
             microphoneOptionsMenuItems
             cameraOptionsMenuItems
         } label: {
@@ -284,13 +296,16 @@ struct CaptureHUD: View {
             Button("Turn Off Microphone") {
                 model.disableMicrophone()
             }
+            .disabled(!model.canChangeRecordingOptions)
             Button("Change Microphone...") {
                 openMicrophoneSelector()
             }
+            .disabled(!model.canChangeRecordingOptions)
         } else {
             Button("Choose Microphone...") {
                 openMicrophoneSelector()
             }
+            .disabled(!model.canChangeRecordingOptions)
         }
     }
 
@@ -300,13 +315,16 @@ struct CaptureHUD: View {
             Button("Turn Off Camera") {
                 model.disableCamera()
             }
+            .disabled(!model.canChangeRecordingOptions)
             Button("Change Camera...") {
                 openCameraSelector()
             }
+            .disabled(!model.canChangeRecordingOptions)
         } else {
             Button("Choose Camera...") {
                 openCameraSelector()
             }
+            .disabled(!model.canChangeRecordingOptions)
         }
     }
 
@@ -339,6 +357,7 @@ struct CaptureHUD: View {
               message != "Rust service ready",
               !message.hasPrefix("Selected "),
               !message.hasPrefix("Opened "),
+              !message.hasPrefix("System audio "),
               !message.hasPrefix("Microphone "),
               !message.hasPrefix("Camera ") else {
             return nil
