@@ -3,6 +3,8 @@ import XCTest
 @testable import OpenRecorderMac
 
 final class ScreenshotExportRendererTests: XCTestCase {
+    private let orientationProbeRows = ["RGB", "CYM"]
+
     func testSuggestedFileNameUsesScreenshotBaseName() {
         let url = URL(fileURLWithPath: "/tmp/open-recorder/screen-shot.png")
 
@@ -44,9 +46,9 @@ final class ScreenshotExportRendererTests: XCTestCase {
             imageShadow: 0
         ))
 
-        let data = try XCTUnwrap(renderer.renderPNG(from: makeOrientationProbeImage()))
+        let data = try XCTUnwrap(renderer.renderPNG(from: makeProbeImage(rows: orientationProbeRows)))
 
-        XCTAssertEqual(try pixelSymbols(from: data), ["RG", "YW"])
+        XCTAssertEqual(try pixelSymbols(from: data), orientationProbeRows)
     }
 
     func testCopiedTIFFRepresentationPreservesRenderedOrientation() throws {
@@ -59,11 +61,93 @@ final class ScreenshotExportRendererTests: XCTestCase {
             imageShadow: 0
         ))
 
-        let pngData = try XCTUnwrap(renderer.renderPNG(from: makeOrientationProbeImage()))
+        let pngData = try XCTUnwrap(renderer.renderPNG(from: makeProbeImage(rows: orientationProbeRows)))
         let image = try XCTUnwrap(NSImage(data: pngData))
         let tiffData = try XCTUnwrap(image.tiffRepresentation)
 
-        XCTAssertEqual(try pixelSymbols(from: tiffData), ["RG", "YW"])
+        XCTAssertEqual(try pixelSymbols(from: tiffData), orientationProbeRows)
+    }
+
+    func testRendererPreservesScreenshotOrientationAcrossBackgroundStyles() throws {
+        let wallpaper = try XCTUnwrap(BackgroundPresets.wallpapers.first)
+        let backgrounds: [(String, BackgroundStyle)] = [
+            ("transparent", .transparent),
+            ("solid", .solid(SerializableColor(red: 0, green: 0, blue: 0))),
+            ("gradient", .gradient(BackgroundPresets.gradients[0])),
+            ("wallpaper", .wallpaper(wallpaper))
+        ]
+
+        for (name, background) in backgrounds {
+            let renderer = ScreenshotExportRenderer(configuration: ScreenshotExportConfiguration(
+                background: background,
+                padding: 0,
+                backgroundRoundness: 0,
+                backgroundShadow: 0,
+                imageRoundness: 0,
+                imageShadow: 0
+            ))
+
+            let data = try XCTUnwrap(
+                renderer.renderPNG(from: makeProbeImage(rows: orientationProbeRows)),
+                "Failed to render \(name) background"
+            )
+
+            XCTAssertEqual(try pixelSymbols(from: data), orientationProbeRows, name)
+        }
+    }
+
+    func testRendererKeepsScreenshotOrientationInsidePadding() throws {
+        let renderer = ScreenshotExportRenderer(configuration: ScreenshotExportConfiguration(
+            background: .solid(SerializableColor(red: 0, green: 0, blue: 0)),
+            padding: 2,
+            backgroundRoundness: 0,
+            backgroundShadow: 0,
+            imageRoundness: 0,
+            imageShadow: 0
+        ))
+
+        let data = try XCTUnwrap(renderer.renderPNG(from: makeProbeImage(rows: orientationProbeRows)))
+
+        XCTAssertEqual(try pixelSymbols(from: data), [
+            "KKKKKKK",
+            "KKKKKKK",
+            "KKRGBKK",
+            "KKCYMKK",
+            "KKKKKKK",
+            "KKKKKKK"
+        ])
+    }
+
+    func testRendererKeepsScreenshotOrientationInsideShadowMargin() throws {
+        let imageShadow = 0.25
+        let padding = 3
+        let shadowMargin = Int(ceil(imageShadow * 56))
+        let renderer = ScreenshotExportRenderer(configuration: ScreenshotExportConfiguration(
+            background: .transparent,
+            padding: Double(padding),
+            backgroundRoundness: 0,
+            backgroundShadow: 0,
+            imageRoundness: 0,
+            imageShadow: imageShadow
+        ))
+
+        let data = try XCTUnwrap(renderer.renderPNG(from: makeProbeImage(rows: orientationProbeRows)))
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: data))
+        let expectedWidth = orientationProbeRows[0].count + padding * 2 + shadowMargin * 2
+        let expectedHeight = orientationProbeRows.count + padding * 2 + shadowMargin * 2
+
+        XCTAssertEqual(bitmap.pixelsWide, expectedWidth)
+        XCTAssertEqual(bitmap.pixelsHigh, expectedHeight)
+        XCTAssertEqual(
+            try pixelSymbols(
+                from: data,
+                x: shadowMargin + padding,
+                y: shadowMargin + padding,
+                width: orientationProbeRows[0].count,
+                height: orientationProbeRows.count
+            ),
+            orientationProbeRows
+        )
     }
 
     func testRendererSupportsGradientBackground() throws {
@@ -117,13 +201,16 @@ final class ScreenshotExportRendererTests: XCTestCase {
         }
     }
 
-    private func makeOrientationProbeImage() throws -> NSImage {
-        let width = 2
-        let height = 2
-        let pixels: [UInt8] = [
-            255, 0, 0, 255, 0, 255, 0, 255,
-            255, 255, 0, 255, 255, 255, 255, 255
-        ]
+    private func makeProbeImage(rows: [String]) throws -> NSImage {
+        let width = try XCTUnwrap(rows.first?.count)
+        let height = rows.count
+        XCTAssertTrue(rows.allSatisfy { $0.count == width })
+
+        let pixels = try rows.flatMap { row in
+            try row.flatMap { symbol in
+                try rgbaComponents(for: symbol)
+            }
+        }
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         let provider = try XCTUnwrap(CGDataProvider(data: Data(pixels) as CFData))
         let cgImage = try XCTUnwrap(CGImage(
@@ -142,11 +229,42 @@ final class ScreenshotExportRendererTests: XCTestCase {
         return NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
     }
 
-    private func pixelSymbols(from data: Data) throws -> [String] {
+    private func rgbaComponents(for symbol: Character) throws -> [UInt8] {
+        switch symbol {
+        case "R": [255, 0, 0, 255]
+        case "G": [0, 255, 0, 255]
+        case "B": [0, 0, 255, 255]
+        case "C": [0, 255, 255, 255]
+        case "Y": [255, 255, 0, 255]
+        case "M": [255, 0, 255, 255]
+        case "K": [0, 0, 0, 255]
+        case "W": [255, 255, 255, 255]
+        default:
+            XCTFail("Unsupported probe symbol \(symbol)")
+            throw ProbeImageError.unsupportedSymbol(symbol)
+        }
+    }
+
+    private func pixelSymbols(
+        from data: Data,
+        x: Int = 0,
+        y: Int = 0,
+        width: Int? = nil,
+        height: Int? = nil
+    ) throws -> [String] {
         let bitmap = try XCTUnwrap(NSBitmapImageRep(data: data))
-        return try (0..<bitmap.pixelsHigh).map { y in
-            try (0..<bitmap.pixelsWide).map { x in
-                let color = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB))
+        let resolvedWidth = width ?? bitmap.pixelsWide - x
+        let resolvedHeight = height ?? bitmap.pixelsHigh - y
+        guard x >= 0, y >= 0, resolvedWidth >= 0, resolvedHeight >= 0,
+              x + resolvedWidth <= bitmap.pixelsWide,
+              y + resolvedHeight <= bitmap.pixelsHigh else {
+            XCTFail("Requested pixel region is outside the rendered bitmap.")
+            return []
+        }
+
+        return try (y..<(y + resolvedHeight)).map { sampleY in
+            try (x..<(x + resolvedWidth)).map { sampleX in
+                let color = try XCTUnwrap(bitmap.colorAt(x: sampleX, y: sampleY)?.usingColorSpace(.sRGB))
                 return symbol(for: color)
             }
             .joined()
@@ -154,15 +272,25 @@ final class ScreenshotExportRendererTests: XCTestCase {
     }
 
     private func symbol(for color: NSColor) -> String {
+        if color.alphaComponent < 0.05 { return "." }
+
         let red = Int((color.redComponent * 255).rounded())
         let green = Int((color.greenComponent * 255).rounded())
         let blue = Int((color.blueComponent * 255).rounded())
 
+        if red < 80, green < 80, blue < 80 { return "K" }
         if red > 200, green < 100, blue < 100 { return "R" }
         if red < 100, green > 200, blue < 100 { return "G" }
+        if red < 100, green < 100, blue > 200 { return "B" }
+        if red < 100, green > 200, blue > 200 { return "C" }
+        if red > 200, green < 100, blue > 200 { return "M" }
         if red > 200, green > 200, blue < 100 { return "Y" }
         if red > 200, green > 200, blue > 200 { return "W" }
         return "?"
+    }
+
+    private enum ProbeImageError: Error {
+        case unsupportedSymbol(Character)
     }
 }
 
