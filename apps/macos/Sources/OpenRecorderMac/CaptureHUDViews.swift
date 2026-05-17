@@ -181,7 +181,6 @@ struct CaptureHUD: View {
     private func sourcePicker(minWidth: CGFloat = 132, maxWidth: CGFloat = 198) -> some View {
         StudioButton(hitTarget: .capsule, help: "Choose Source") {
             model.requestSourceSelector()
-            openWindow(id: "source-selector")
         } label: {
             SourceChip(source: model.selectedSource, tone: sourceChipTone, minWidth: minWidth, maxWidth: maxWidth)
         }

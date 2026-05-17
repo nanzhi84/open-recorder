@@ -291,6 +291,11 @@ final class AppWindowActions {
             openWindow("hud")
             openWindow("source-selector")
             activateApp()
+        case .showScreenRecordingSetup:
+            dismissWindow("source-selector")
+            dismissWindow("area-selector")
+            openWindow("hud")
+            activateApp()
         case .hideRecordingSetup:
             dismissWindow("hud")
             dismissWindow("source-selector")

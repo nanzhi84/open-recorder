@@ -361,7 +361,13 @@ final class AppModel: ObservableObject {
     }
 
     func requestSourceSelector(kind: CaptureSourceKind? = nil) {
-        preferredSourceSelectorKind = kind ?? selectedSource?.kind ?? preferredSourceSelectorKind ?? .display
+        let resolvedKind = kind ?? selectedSource?.kind ?? preferredSourceSelectorKind ?? .window
+        guard resolvedKind != .display else {
+            requestScreenSelection()
+            return
+        }
+
+        preferredSourceSelectorKind = resolvedKind
         requestWindow(.showSourceSelector)
     }
 
@@ -513,8 +519,16 @@ final class AppModel: ObservableObject {
 
     private func focusActiveCaptureWindow() {
         switch hudState.phase {
-        case .selectingSource, .ready, .areaSelecting:
+        case .selectingSource:
             requestWindow(.showSourceSelector)
+        case .ready(_, let source):
+            if source.kind == .display {
+                requestWindow(.showHUD)
+            } else {
+                requestWindow(.showSourceSelector)
+            }
+        case .areaSelecting:
+            requestWindow(.showAreaSelector)
         case .choosingSourceType:
             showHUD()
         case .screenSelecting:
@@ -699,7 +713,7 @@ final class AppModel: ObservableObject {
         countdownOverlayController.dismiss()
         hudState = HUDState(phase: .ready(.recording, source), presentation: .visible)
         statusMessage = message ?? statusMessage
-        requestWindow(.showRecordingSetup)
+        requestWindow(source.kind == .display ? .showScreenRecordingSetup : .showRecordingSetup)
     }
 
     func stopRecording() {

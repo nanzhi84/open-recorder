@@ -256,6 +256,7 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertEqual(presenter.presentedSources, [source])
         XCTAssertNotNil(presenter.onSelect)
         XCTAssertNotNil(presenter.onCancel)
+        XCTAssertNotEqual(model.windowCommand?.action, .showSourceSelector)
     }
 
     func testChoosingScreenSelectsDisplayAndReturnsReadyHUD() {
@@ -273,6 +274,23 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertEqual(model.captureFlow, .recordingSetup)
         XCTAssertEqual(model.windowCommand?.action, .showHUD)
         XCTAssertGreaterThanOrEqual(presenter.dismissCallCount, 1)
+    }
+
+    func testRequestingSourceSelectorForSelectedScreenReopensScreenSelectionOverlay() {
+        let presenter = ScreenSelectionPresenterSpy()
+        let model = AppModel(screenSelectionPresenter: presenter)
+        let source = makeSource(displayID: 42)
+        model.capture.setSourcesForTesting([source])
+        model.captureMode = .recording
+        model.selectedSource = source
+        model.hudState = .ready(.recording, source)
+
+        model.requestSourceSelector()
+
+        XCTAssertEqual(model.hudState, .screenSelecting(.recording))
+        XCTAssertEqual(model.preferredSourceSelectorKind, .display)
+        XCTAssertEqual(presenter.presentedSources, [source])
+        XCTAssertNotEqual(model.windowCommand?.action, .showSourceSelector)
     }
 
     func testCancelingScreenSelectionReturnsToSourceTypeChoice() {
@@ -678,7 +696,7 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertEqual(model.hudState, .ready(.recording, source))
         XCTAssertEqual(model.hudState.presentation, .visible)
         XCTAssertEqual(model.statusMessage, "Recording canceled.")
-        XCTAssertEqual(model.windowCommand?.action, .showRecordingSetup)
+        XCTAssertEqual(model.windowCommand?.action, .showScreenRecordingSetup)
     }
 
     func testRecordingShortcutDuringStartingQueuesStop() {
@@ -744,6 +762,24 @@ final class AppModelStateTests: XCTestCase {
 
         XCTAssertTrue(openedWindows.isEmpty)
         XCTAssertEqual(dismissedWindows, ["hud", "source-selector"])
+    }
+
+    func testAppWindowActionsShowScreenRecordingSetupDoesNotOpenSourceSelector() {
+        let actions = AppWindowActions()
+        var openedWindows: [String] = []
+        var dismissedWindows: [String] = []
+
+        actions.install(
+            openWindow: { openedWindows.append($0) },
+            openEditor: { _ in },
+            dismissWindow: { dismissedWindows.append($0) },
+            activateApp: {}
+        )
+        actions.perform(NativeWindowCommand(action: .showScreenRecordingSetup))
+
+        XCTAssertEqual(openedWindows, ["hud"])
+        XCTAssertEqual(dismissedWindows, ["source-selector", "area-selector"])
+        XCTAssertFalse(openedWindows.contains("source-selector"))
     }
 
     func testAppWindowActionsCloseCaptureSetupClosesSelectorsWithoutHUD() {

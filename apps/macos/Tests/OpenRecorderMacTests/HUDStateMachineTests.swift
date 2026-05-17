@@ -117,7 +117,7 @@ final class HUDStateMachineTests: XCTestCase {
 
     func testDuplicateCaptureRequestDuringReadyStatePreservesExistingModeAndFocusesSelector() {
         let model = AppModel()
-        let source = makeSource()
+        let source = makeSource(id: "window:1", kind: .window)
         model.hudState = .ready(.recording, source)
         model.captureMode = .recording
         model.selectedSource = source
@@ -128,6 +128,21 @@ final class HUDStateMachineTests: XCTestCase {
         XCTAssertEqual(model.captureMode, .recording)
         XCTAssertEqual(model.statusMessage, "Finish or cancel the current capture before starting another.")
         XCTAssertEqual(model.windowCommand?.action, .showSourceSelector)
+    }
+
+    func testDuplicateCaptureRequestDuringReadyScreenStateFocusesHUD() {
+        let model = AppModel()
+        let source = makeSource()
+        model.hudState = .ready(.recording, source)
+        model.captureMode = .recording
+        model.selectedSource = source
+
+        model.beginCapture(.screenshot)
+
+        XCTAssertEqual(model.hudState, .ready(.recording, source))
+        XCTAssertEqual(model.captureMode, .recording)
+        XCTAssertEqual(model.statusMessage, "Finish or cancel the current capture before starting another.")
+        XCTAssertEqual(model.windowCommand?.action, .showHUD)
     }
 
     func testDuplicateCaptureRequestDuringActiveRecordingStateFocusesHUD() {
@@ -190,7 +205,7 @@ final class HUDStateMachineTests: XCTestCase {
 
         XCTAssertEqual(model.hudState, .areaSelecting(.screenshot))
         XCTAssertEqual(model.captureMode, .screenshot)
-        XCTAssertEqual(model.windowCommand?.action, .showSourceSelector)
+        XCTAssertEqual(model.windowCommand?.action, .showAreaSelector)
 
         model.cancelCapture()
 

@@ -802,6 +802,7 @@ enum NativeWindowCommandAction: Equatable {
     case showOnboarding
     case finishOnboarding
     case showRecordingSetup
+    case showScreenRecordingSetup
     case hideRecordingSetup
     case showSourceSelector
     case showMicrophoneSelector

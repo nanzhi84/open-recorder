@@ -11,7 +11,7 @@ struct SourceSelectorWindowView: View {
     @State private var preferredHeight: CGFloat = SourceSelectorWindowMetrics.compactHeight
 
     private var visibleTabs: [SourceSelectorTab] {
-        SourceSelectorTab.allCases
+        [.windows, .area]
     }
 
     var body: some View {
@@ -61,9 +61,8 @@ struct SourceSelectorWindowView: View {
     }
 
     private func applyPreferredSourceTab() {
-        sourceTab = SourceSelectorTab(
-            sourceKind: model.preferredSourceSelectorKind ?? model.selectedSource?.kind ?? .display
-        )
+        let preferredKind = model.preferredSourceSelectorKind ?? model.selectedSource?.kind ?? .window
+        sourceTab = preferredKind == .display ? .windows : SourceSelectorTab(sourceKind: preferredKind)
     }
 }
 

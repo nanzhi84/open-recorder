@@ -439,6 +439,11 @@ struct WindowCommandBridge: View {
             openWindow(id: "hud")
             openWindow(id: "source-selector")
             NSApp.activate(ignoringOtherApps: true)
+        case .showScreenRecordingSetup:
+            dismissWindow(id: "source-selector")
+            dismissWindow(id: "area-selector")
+            openWindow(id: "hud")
+            NSApp.activate(ignoringOtherApps: true)
         case .hideRecordingSetup:
             dismissWindow(id: "hud")
             dismissWindow(id: "source-selector")
