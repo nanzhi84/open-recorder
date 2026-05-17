@@ -58,6 +58,16 @@ set_plist_string() {
 	fi
 }
 
+binary_has_rpath() {
+	local binary="$1"
+	local expected_rpath="$2"
+
+	otool -l "$binary" | awk '
+		$1 == "cmd" && $2 == "LC_RPATH" { in_rpath = 1; next }
+		in_rpath && $1 == "path" { print $2; in_rpath = 0 }
+	' | grep -Fxq "$expected_rpath"
+}
+
 cd "$repo_root/apps/rust-service"
 CARGO_INCREMENTAL=0 cargo build
 
@@ -106,6 +116,14 @@ if [[ -f "$icon_source" ]]; then
 fi
 
 chmod +x "$macos_dir/OpenRecorderMac" "$macos_dir/open-recorder-service"
+frameworks_rpath="@executable_path/../Frameworks"
+if ! binary_has_rpath "$macos_dir/OpenRecorderMac" "$frameworks_rpath"; then
+	if ! command -v install_name_tool >/dev/null 2>&1; then
+		print -u2 -- "install_name_tool is required to add $frameworks_rpath to OpenRecorderMac"
+		exit 1
+	fi
+	install_name_tool -add_rpath "$frameworks_rpath" "$macos_dir/OpenRecorderMac"
+fi
 find "$bundle_dir" \( -name '._*' -o -name '.__CodeSignature' \) -delete
 OPEN_RECORDER_SIGNING_PURPOSE="$app_variant" zsh "$repo_root/scripts/sign-macos-app.zsh" "$bundle_dir"
 
