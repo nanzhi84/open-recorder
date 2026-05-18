@@ -61,5 +61,27 @@
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/imbhargav5/open-recorder/releases/download/v0.2.18/open-recorder-macos.zip" sparkle:edSignature="1pba+2V3ijY73g2nSIHgTsWCzUJtLvZd/gTpAUEmBNcRp2q2WYq6L51ZH1Gk+kVRwmlMAIBXFuLWC2yNqYeFCA==" length="38977709" type="application/octet-stream"/>
         </item>
+        <item>
+            <title>Version 0.2.19</title>
+            <pubDate>Mon, 18 May 2026 19:40:34 GMT</pubDate>
+            <sparkle:version>0.2.19</sparkle:version>
+            <sparkle:shortVersionString>0.2.19</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+## Commits since v0.2.18
+
+- cfe3dbb Consolidate app state machines
+- 11d7138 Refactor editor state machines
+- 1ecb0ff Refactor editor state into machines
+- 6e93fe4 Refactor capture flow state machine
+- 399a78a Keep capture UI hidden during captures
+- bc4e42c Add screenshot project tabs and autosave
+- a0a7318 Respect preview aspect in video exports
+- 872b739 Hide desktop from window source picker
+- e87c988 Generate release notes from commits
+- 77a8ab4 Update appcast for v0.2.18
+]]></description>
+            <enclosure url="https://github.com/imbhargav5/open-recorder/releases/download/v0.2.19/open-recorder-macos.zip" sparkle:edSignature="G7NnMLmKkrxUM2dURI0r7a3wAihmzYij4bVD2ONQ9cYB6qdUopa4uoaeihZAo8X8TdMPFDYkWBu0lI5xQYjKAA==" length="39865372" type="application/octet-stream"/>
+        </item>
     </channel>
 </rss>
