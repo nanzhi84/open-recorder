@@ -291,6 +291,8 @@ final class AppWindowActions {
             activateApp()
         case .hideRecordingSetup:
             dismissCaptureWindows()
+        case .hideAppWindowsForCapture:
+            hideAppWindowsForCapture()
         case .showSourceSelector:
             openWindow("source-selector")
         case .showMicrophoneSelector:
@@ -326,6 +328,12 @@ final class AppWindowActions {
         dismissWindow("area-selector")
         dismissWindow("microphone-selector")
         dismissWindow("camera-selector")
+    }
+
+    private func hideAppWindowsForCapture() {
+        dismissCaptureWindows()
+        dismissWindow("studio")
+        dismissWindow("editor")
     }
 }
 

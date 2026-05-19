@@ -432,7 +432,7 @@ final class AppModelStateTests: XCTestCase {
         }
 
         XCTAssertEqual(observedPresentation, .hidden)
-        XCTAssertEqual(observedWindowAction, .hideRecordingSetup)
+        XCTAssertEqual(observedWindowAction, .hideAppWindowsForCapture)
 
         await waitForCondition {
             model.windowCommand?.action == .showStudio
@@ -509,6 +509,36 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertTrue(model.canStartNewCapture)
         XCTAssertEqual(model.currentVideoURL, outputURL)
         XCTAssertNil(model.currentScreenshotURL)
+    }
+
+    func testStoppingRecordingWithWrittenFileOpensEditorEvenIfProjectIndexingFails() async throws {
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("finished-recording-\(UUID().uuidString).mp4")
+        defer {
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+        try Data("mp4".utf8).write(to: outputURL)
+        let model = AppModel(
+            stopRecording: {
+                outputURL
+            }
+        )
+        let source = makeSource()
+
+        model.setCaptureStateForTesting(.recording(source))
+        model.stopRecording()
+        await waitForCondition {
+            model.windowCommand?.action == .showStudio
+        }
+
+        let editorSession = try XCTUnwrap(model.windowCommand?.editorSession)
+        XCTAssertEqual(model.currentVideoURL, outputURL)
+        XCTAssertNil(model.currentScreenshotURL)
+        XCTAssertEqual(model.selectedSection, .editor)
+        XCTAssertEqual(editorSession.kind, .video)
+        XCTAssertEqual(editorSession.url, outputURL)
+        XCTAssertEqual(model.hudState, .choosingMode)
+        XCTAssertTrue(model.canStartNewCapture)
     }
 
     func testEditorSessionCanCarryRecordingSessionMetadata() {
@@ -881,6 +911,31 @@ final class AppModelStateTests: XCTestCase {
 
         XCTAssertTrue(openedWindows.isEmpty)
         XCTAssertEqual(dismissedWindows, ["hud", "source-selector", "area-selector", "microphone-selector", "camera-selector"])
+    }
+
+    func testAppWindowActionsHideAppWindowsForCaptureDismissesEditorsToo() {
+        let actions = AppWindowActions()
+        var openedWindows: [String] = []
+        var dismissedWindows: [String] = []
+
+        actions.install(
+            openWindow: { openedWindows.append($0) },
+            openEditor: { _ in },
+            dismissWindow: { dismissedWindows.append($0) },
+            activateApp: {}
+        )
+        actions.perform(NativeWindowCommand(action: .hideAppWindowsForCapture))
+
+        XCTAssertTrue(openedWindows.isEmpty)
+        XCTAssertEqual(dismissedWindows, [
+            "hud",
+            "source-selector",
+            "area-selector",
+            "microphone-selector",
+            "camera-selector",
+            "studio",
+            "editor"
+        ])
     }
 
     func testAppWindowActionsShowScreenRecordingSetupDoesNotOpenSourceSelector() {

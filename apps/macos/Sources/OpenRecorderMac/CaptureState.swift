@@ -149,6 +149,7 @@ enum CaptureEffect: Hashable {
     case showRecordingSetup(CaptureSourceKind)
     case dismissScreenSelection
     case dismissCaptureWindows
+    case hideAppWindowsForCapture
     case focusActiveCaptureWindow
     case flashDisplay(CaptureSource)
     case cancelRecordingStart
@@ -453,7 +454,7 @@ struct CaptureState: Hashable {
             case .screenshot:
                 next.setPhase(.capturingScreenshot(source))
                 effects.append(.dismissScreenSelection)
-                effects.append(.dismissCaptureWindows)
+                effects.append(.hideAppWindowsForCapture)
                 effects.append(.runScreenshotCapture(source))
             }
 
@@ -504,7 +505,7 @@ struct CaptureState: Hashable {
             next.setPhase(.countingDownRecording(source))
             statusMessage = "Recording starts in 3..."
             effects.append(.dismissScreenSelection)
-            effects.append(.dismissCaptureWindows)
+            effects.append(.hideAppWindowsForCapture)
             effects.append(.runRecordingStart(source, outputURL))
 
         case .recordingFilePreparationFailed(_, let message):
@@ -516,7 +517,7 @@ struct CaptureState: Hashable {
             next.setPhase(.countingDownRecording(source))
             statusMessage = "Recording starts in 3..."
             effects.append(.dismissScreenSelection)
-            effects.append(.dismissCaptureWindows)
+            effects.append(.hideAppWindowsForCapture)
 
         case .recordingStarting(let source):
             next.selectedSource = source
@@ -524,7 +525,7 @@ struct CaptureState: Hashable {
             next.setPhase(.startingRecording(source, stopRequested: false))
             statusMessage = "Starting recording..."
             effects.append(.dismissScreenSelection)
-            effects.append(.dismissCaptureWindows)
+            effects.append(.hideAppWindowsForCapture)
 
         case .recordingStarted(let source):
             next.selectedSource = source
@@ -532,7 +533,7 @@ struct CaptureState: Hashable {
             next.setPhase(.recording(source))
             statusMessage = "Recording \(source.name)"
             effects.append(.dismissScreenSelection)
-            effects.append(.dismissCaptureWindows)
+            effects.append(.hideAppWindowsForCapture)
 
         case .recordingStopRequested:
             switch next.phase {
@@ -600,7 +601,7 @@ struct CaptureState: Hashable {
             next.preferredSourceKind = source.kind
             next.setPhase(.capturingScreenshot(source))
             effects.append(.dismissScreenSelection)
-            effects.append(.dismissCaptureWindows)
+            effects.append(.hideAppWindowsForCapture)
             effects.append(.runScreenshotCapture(source))
 
         case .screenshotCapturing(let source):
@@ -608,7 +609,7 @@ struct CaptureState: Hashable {
             next.preferredSourceKind = source.kind
             next.setPhase(.capturingScreenshot(source))
             effects.append(.dismissScreenSelection)
-            effects.append(.dismissCaptureWindows)
+            effects.append(.hideAppWindowsForCapture)
 
         case .screenshotRestored(let source, let message):
             next.selectedSource = source

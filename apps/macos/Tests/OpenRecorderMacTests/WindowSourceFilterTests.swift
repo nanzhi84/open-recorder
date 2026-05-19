@@ -30,6 +30,8 @@ final class WindowSourceFilterTests: XCTestCase {
         XCTAssertNil(displayInfo(title: "Overlay", ownerName: "Design App", layer: 4))
         XCTAssertNil(displayInfo(title: "Choose Source", ownerName: currentProcessName))
         XCTAssertNil(displayInfo(title: "Choose Source", ownerName: "Open Recorder", bundleIdentifier: "dev.openrecorder.app"))
+        XCTAssertNil(displayInfo(title: "Open Recorder", ownerName: "Open Recorder", bundleIdentifier: nil))
+        XCTAssertNil(displayInfo(title: "Open Recorder", ownerName: "Open Recorder", bundleIdentifier: "dev.openrecorder.app.dev"))
     }
 
     func testKeepsNormalAppWindows() {

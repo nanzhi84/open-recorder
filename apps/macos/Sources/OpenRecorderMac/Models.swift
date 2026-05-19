@@ -667,6 +667,7 @@ enum NativeWindowCommandAction: Equatable {
     case showRecordingSetup
     case showScreenRecordingSetup
     case hideRecordingSetup
+    case hideAppWindowsForCapture
     case showSourceSelector
     case showMicrophoneSelector
     case showCameraSelector

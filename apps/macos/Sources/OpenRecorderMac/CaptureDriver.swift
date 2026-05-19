@@ -10,6 +10,7 @@ struct CaptureEffectHandlers {
     var showRecordingSetup: (CaptureSourceKind) -> Void = { _ in }
     var dismissScreenSelection: () -> Void = {}
     var dismissCaptureWindows: () -> Void = {}
+    var hideAppWindowsForCapture: () -> Void = {}
     var focusActiveCaptureWindow: () -> Void = {}
     var flashDisplay: (CaptureSource) -> Void = { _ in }
     var cancelRecordingStart: () -> Void = {}
@@ -81,6 +82,8 @@ final class CaptureDriver {
                 effectHandlers.dismissScreenSelection()
             case .dismissCaptureWindows:
                 effectHandlers.dismissCaptureWindows()
+            case .hideAppWindowsForCapture:
+                effectHandlers.hideAppWindowsForCapture()
             case .focusActiveCaptureWindow:
                 effectHandlers.focusActiveCaptureWindow()
             case .flashDisplay(let source):

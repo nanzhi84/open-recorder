@@ -62,7 +62,7 @@ final class CaptureStateReducerTests: XCTestCase {
         let completed = requested.state.applying(.completeInteractiveAreaSelection(areaSource))
         XCTAssertEqual(completed.state.phase, .capturingScreenshot(areaSource))
         XCTAssertFalse(completed.state.isAreaSelectionActive)
-        XCTAssertEqual(completed.effects, [.dismissScreenSelection, .dismissCaptureWindows, .runScreenshotCapture(areaSource)])
+        XCTAssertEqual(completed.effects, [.dismissScreenSelection, .hideAppWindowsForCapture, .runScreenshotCapture(areaSource)])
         XCTAssertEqual(completed.statusMessage, "Selected area")
 
         let canceled = requested.state.applying(.cancelCapture)
@@ -83,7 +83,7 @@ final class CaptureStateReducerTests: XCTestCase {
 
         XCTAssertEqual(countdown.state.phase, .countingDownRecording(source))
         XCTAssertEqual(countdown.state.presentation, .hidden)
-        XCTAssertEqual(countdown.effects, [.dismissScreenSelection, .dismissCaptureWindows, .runRecordingStart(source, outputURL)])
+        XCTAssertEqual(countdown.effects, [.dismissScreenSelection, .hideAppWindowsForCapture, .runRecordingStart(source, outputURL)])
 
         let canceled = countdown.state.applying(.recordingStopRequested)
         XCTAssertEqual(canceled.state.phase, .ready(.recording, source))
@@ -121,7 +121,7 @@ final class CaptureStateReducerTests: XCTestCase {
 
         XCTAssertEqual(capturing.state.phase, .capturingScreenshot(source))
         XCTAssertEqual(capturing.state.presentation, .hidden)
-        XCTAssertEqual(capturing.effects, [.dismissScreenSelection, .dismissCaptureWindows, .runScreenshotCapture(source)])
+        XCTAssertEqual(capturing.effects, [.dismissScreenSelection, .hideAppWindowsForCapture, .runScreenshotCapture(source)])
 
         let failed = capturing.state.applying(.screenshotRestored(source, message: "No screen"))
         XCTAssertEqual(failed.state.phase, .ready(.screenshot, source))
@@ -152,7 +152,7 @@ final class CaptureStateReducerTests: XCTestCase {
 
         let screenshot = CaptureState.areaSelecting(.screenshot).applying(.completeInteractiveAreaSelection(source))
         XCTAssertEqual(screenshot.state.phase, .capturingScreenshot(source))
-        XCTAssertEqual(screenshot.effects, [.dismissScreenSelection, .dismissCaptureWindows, .runScreenshotCapture(source)])
+        XCTAssertEqual(screenshot.effects, [.dismissScreenSelection, .hideAppWindowsForCapture, .runScreenshotCapture(source)])
     }
 
     private func makeSource(

@@ -539,6 +539,52 @@ final class ScreenshotEditorStateMachineTests: XCTestCase {
         XCTAssertEqual(copiedData, Data([0x89, 0x50, 0x4E, 0x47]))
         XCTAssertEqual(statusMessages.last, "Screenshot PNG copied")
     }
+
+    @MainActor
+    func testScreenshotDriverExportUsesCurrentStyleState() {
+        let driver = ScreenshotEditorDriver()
+        let image = NSImage(size: NSSize(width: 1, height: 1))
+        let targetURL = URL(fileURLWithPath: "/tmp/styled-shot.png")
+        let styledState = ScreenshotEditorState(
+            background: .solid(SerializableColor(hex: "#AA5500")),
+            padding: 96,
+            backgroundRoundness: 24,
+            backgroundShadow: 0.2,
+            imageRoundness: 14,
+            imageShadow: 0.4
+        )
+        var renderedState: ScreenshotEditorState?
+
+        driver.configure(
+            saveHandler: { snapshot in
+                ProjectSummary(
+                    id: "project",
+                    title: snapshot.title,
+                    path: snapshot.projectPath,
+                    recordingPath: snapshot.recordingPath,
+                    screenshotPath: snapshot.screenshotPath,
+                    sourceName: snapshot.sourceName,
+                    createdAt: "now",
+                    updatedAt: "now",
+                    lastOpenedAt: "now",
+                    missing: false
+                )
+            },
+            statusHandler: { _ in },
+            setStatusMessage: { _ in },
+            renderPNG: { _, state in
+                renderedState = state
+                return Data([0x89, 0x50, 0x4E, 0x47])
+            },
+            presentSaveURL: { _ in targetURL },
+            writePNG: { _, _ in }
+        )
+
+        driver.apply(styledState)
+        driver.saveComposedPNG(image: image, suggestedFileName: "styled-shot.png")
+
+        XCTAssertEqual(renderedState, styledState)
+    }
 }
 
 final class TimelineEditStateMachineTests: XCTestCase {

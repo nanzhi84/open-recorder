@@ -447,6 +447,8 @@ struct WindowCommandBridge: View {
             NSApp.activate(ignoringOtherApps: true)
         case .hideRecordingSetup:
             dismissCaptureWindows()
+        case .hideAppWindowsForCapture:
+            hideAppWindowsForCapture()
         case .showSourceSelector:
             openWindow(id: "source-selector")
         case .showMicrophoneSelector:
@@ -482,6 +484,12 @@ struct WindowCommandBridge: View {
         dismissWindow(id: "area-selector")
         dismissWindow(id: "microphone-selector")
         dismissWindow(id: "camera-selector")
+    }
+
+    private func hideAppWindowsForCapture() {
+        dismissCaptureWindows()
+        dismissWindow(id: "studio")
+        dismissWindow(id: "editor")
     }
 }
 

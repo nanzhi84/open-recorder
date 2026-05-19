@@ -101,6 +101,17 @@ enum WindowSourceFilter {
             return nil
         }
 
+        if isOpenRecorderBundleIdentifier(bundleIdentifier),
+           isOpenRecorderBundleIdentifier(currentBundleIdentifier) {
+            return nil
+        }
+
+        if isOpenRecorderBundleIdentifier(currentBundleIdentifier),
+           let ownerName,
+           isOpenRecorderOwnerName(ownerName) {
+            return nil
+        }
+
         if let layer = metadata.layer, layer != 0 {
             return nil
         }
@@ -196,6 +207,16 @@ enum WindowSourceFilter {
                 character.isLetter || character.isNumber || character == "-" || character == "_"
             }
         }
+    }
+
+    private static func isOpenRecorderBundleIdentifier(_ value: String?) -> Bool {
+        guard let value else { return false }
+        return value.lowercased().hasPrefix("dev.openrecorder.app")
+    }
+
+    private static func isOpenRecorderOwnerName(_ value: String) -> Bool {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized == "open recorder" || normalized == "open recorder dev"
     }
 }
 

@@ -161,6 +161,9 @@ final class AppModel: ObservableObject {
                 dismissCaptureWindows: { [weak self] in
                     self?.requestWindow(.hideRecordingSetup)
                 },
+                hideAppWindowsForCapture: { [weak self] in
+                    self?.requestWindow(.hideAppWindowsForCapture)
+                },
                 focusActiveCaptureWindow: { [weak self] in
                     self?.focusActiveCaptureWindow()
                 },
@@ -881,26 +884,21 @@ final class AppModel: ObservableObject {
                     screenStartedAt: activeScreenStartedAt,
                     facecamStartedAt: activeFacecamStartedAt
                 )
-                let summary: ProjectSummary = try service.call(
-                    "registerRecording",
-                    params: [
-                        "path": outputURL.path,
-                        "sourceName": sourceName ?? "Screen Recording",
-                        "title": outputURL.deletingPathExtension().lastPathComponent,
-                        "editorState": jsonObject(for: ProjectEditorState(timelineEdits: timelineEdits)) ?? [:]
-                    ],
-                    as: ProjectSummary.self
+                let summary = registerRecordingProject(
+                    outputURL,
+                    sourceName: sourceName,
+                    timelineEdits: timelineEdits
                 )
-                sendAppShell(.projectsReplaced(try service.call("listProjects", as: [ProjectSummary].self)))
+                let title = summary?.title ?? outputURL.deletingPathExtension().lastPathComponent
                 showEditor(for: EditorSession(
                     kind: .video,
                     url: outputURL,
-                    title: summary.title,
-                    projectPath: summary.path,
+                    title: title,
+                    projectPath: summary?.path,
                     recordingSession: recordingSession,
                     timelineEditSnapshot: timelineEdits
                 ))
-                statusMessage = "Saved \(summary.title)"
+                statusMessage = "Saved \(title)"
             } else {
                 dispatch(.recordingStopped(message: "Recording stopped before a file was written."))
             }
@@ -1006,6 +1004,34 @@ final class AppModel: ObservableObject {
                 as: ProjectSummary.self
             )
             upsertProjectSummary(summary)
+            return summary
+        } catch {
+            return nil
+        }
+    }
+
+    private func registerRecordingProject(
+        _ outputURL: URL,
+        sourceName: String?,
+        timelineEdits: TimelineEditSnapshot
+    ) -> ProjectSummary? {
+        let title = outputURL.deletingPathExtension().lastPathComponent
+        do {
+            let summary: ProjectSummary = try service.call(
+                "registerRecording",
+                params: [
+                    "path": outputURL.path,
+                    "sourceName": sourceName ?? "Screen Recording",
+                    "title": title,
+                    "editorState": jsonObject(for: ProjectEditorState(timelineEdits: timelineEdits)) ?? [:]
+                ],
+                as: ProjectSummary.self
+            )
+            if let projects = try? service.call("listProjects", as: [ProjectSummary].self) {
+                sendAppShell(.projectsReplaced(projects))
+            } else {
+                upsertProjectSummary(summary)
+            }
             return summary
         } catch {
             return nil
