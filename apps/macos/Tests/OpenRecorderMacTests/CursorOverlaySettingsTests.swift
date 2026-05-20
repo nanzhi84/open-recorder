@@ -75,6 +75,43 @@ final class CursorOverlaySettingsTests: XCTestCase {
         XCTAssertEqual(decoded.variant, .slim)
     }
 
+    func testCursorOverlayGeometryUsesSourceSizedDefaultAtFullScale() {
+        XCTAssertEqual(
+            CursorOverlayGeometry.glyphSize(displayScale: 1, settings: .default),
+            20,
+            accuracy: 0.001
+        )
+    }
+
+    func testCursorOverlayGeometryScalesWithPreviewDisplayScale() {
+        XCTAssertEqual(
+            CursorOverlayGeometry.glyphSize(displayScale: 0.5, settings: .default),
+            10,
+            accuracy: 0.001
+        )
+    }
+
+    func testCursorOverlayGeometryAppliesSizeMultiplier() {
+        let settings = CursorOverlaySettings(isVisible: true, loops: false, size: 2, smoothing: 0.4)
+
+        XCTAssertEqual(
+            CursorOverlayGeometry.glyphSize(displayScale: 1, settings: settings),
+            40,
+            accuracy: 0.001
+        )
+    }
+
+    func testCursorOverlayGeometryDerivesScaleFromContentAndCrop() {
+        let contentRect = CGRect(x: 0, y: 0, width: 864, height: 558)
+        let cropRect = CGRect(x: 0, y: 0, width: 1728, height: 1116)
+
+        XCTAssertEqual(
+            CursorOverlayGeometry.displayScale(contentRect: contentRect, cropRect: cropRect),
+            0.5,
+            accuracy: 0.001
+        )
+    }
+
     func testProjectVideoStateDecodesLegacyCursorOverlayDefaults() throws {
         let data = """
         {

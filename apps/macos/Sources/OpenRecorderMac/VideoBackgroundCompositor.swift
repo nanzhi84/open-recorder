@@ -433,8 +433,11 @@ final class VideoBackgroundCompositor: NSObject, AVVideoCompositing, @unchecked 
             instruction: instruction,
             track: track
         )
-        let baseSize = max(14, min(52, min(contentRect.width, contentRect.height) * 0.032))
-        let cursorSize = baseSize * settings.size
+        let cursorSize = CursorOverlayGeometry.glyphSize(
+            contentRect: contentRect,
+            cropRect: instruction.cropRect,
+            settings: settings
+        )
         guard let glyph = cursorGlyphImage(
             size: cursorSize,
             style: settings.style,

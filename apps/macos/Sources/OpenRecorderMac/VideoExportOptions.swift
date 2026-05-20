@@ -775,8 +775,11 @@ enum VideoExportRenderer {
         settings: CursorOverlaySettings
     ) -> CALayer {
         let resolvedSettings = settings.clamped
-        let baseSize = max(14, min(52, min(contentRect.width, contentRect.height) * 0.032))
-        let cursorSize = baseSize * resolvedSettings.size
+        let cursorSize = CursorOverlayGeometry.glyphSize(
+            contentRect: contentRect,
+            cropRect: cropRect,
+            settings: resolvedSettings
+        )
         let cursorLayer = CALayer()
         guard let glyph = CursorPresetRenderer.renderedGlyph(
             style: resolvedSettings.style,

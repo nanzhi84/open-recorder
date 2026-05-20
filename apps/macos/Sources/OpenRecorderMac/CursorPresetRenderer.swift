@@ -351,10 +351,11 @@ struct CursorGlyphView: View {
     var style: CursorStyle
     var variant: CursorVariant
     var scale: Double
+    var glyphSize: CGFloat? = nil
     var alignsHotspot = false
 
     var body: some View {
-        let size = max(12, 24 * CGFloat(scale))
+        let size = glyphSize.map { max(1, $0) } ?? max(12, 24 * CGFloat(scale))
         let resolvedVariant = style.resolvedVariant(variant)
         if let glyph = CursorPresetRenderer.renderedGlyph(style: style, variant: resolvedVariant, size: size) {
             Image(nsImage: NSImage(cgImage: glyph.image, size: glyph.canvasSize))

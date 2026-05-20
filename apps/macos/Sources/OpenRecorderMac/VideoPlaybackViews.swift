@@ -779,6 +779,7 @@ private struct CursorOverlayView: View {
                     style: resolvedSettings.style,
                     variant: resolvedSettings.variant,
                     scale: resolvedSettings.size,
+                    glyphSize: cursorGlyphSize(in: proxy.size, settings: resolvedSettings),
                     alignsHotspot: true
                 )
                     .offset(x: point.x, y: point.y)
@@ -807,6 +808,24 @@ private struct CursorOverlayView: View {
         return CGPoint(
             x: point.x / CGFloat(max(track.width, 1)) * size.width,
             y: point.y / CGFloat(max(track.height, 1)) * size.height
+        )
+    }
+
+    private func cursorGlyphSize(in size: CGSize, settings: CursorOverlaySettings) -> CGFloat? {
+        guard size.width > 0,
+              size.height > 0,
+              let track else {
+            return nil
+        }
+
+        let sourceRect = CGRect(
+            origin: .zero,
+            size: CGSize(width: CGFloat(max(track.width, 1)), height: CGFloat(max(track.height, 1)))
+        )
+        return CursorOverlayGeometry.glyphSize(
+            contentRect: CGRect(origin: .zero, size: size),
+            cropRect: sourceRect,
+            settings: settings
         )
     }
 
