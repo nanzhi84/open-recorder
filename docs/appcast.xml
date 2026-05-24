@@ -192,5 +192,32 @@
 ]]></description>
             <enclosure url="https://github.com/imbhargav5/open-recorder/releases/download/v0.2.26/open-recorder-macos.zip" sparkle:edSignature="BUF6LqDijBfDE83tYaV/Eg4HAIxEzgwFzts4ZT/hh6g+zwWmtipZadWuoXZFRb3yBnKuQ5ufTbmAXKBr2sdmBg==" length="39800481" type="application/octet-stream"/>
         </item>
+        <item>
+            <title>Version 0.2.27</title>
+            <pubDate>Sun, 24 May 2026 21:24:43 GMT</pubDate>
+            <sparkle:version>0.2.27</sparkle:version>
+            <sparkle:shortVersionString>0.2.27</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+## Commits since v0.2.26
+
+- bf7685c Merge pull request #320 from imbhargav5/codex/extensible-cursor-registry
+- 745c429 Merge remote-tracking branch 'origin/main' into codex/extensible-cursor-registry
+- ba48b11 Add extensible cursor styles and camera timeline editing
+- 0d64139 Fix deleting selected timeline clips
+- 7a335be Merge pull request #318 from imbhargav5/codex/remove-timeline-tooltips
+- bb60bde Remove timeline toolbar tooltips
+- 44e97d0 Merge pull request #316 from imbhargav5/new-styling-changes
+- e46c2cf Revert zoom layer styling changes
+- 8e179d8 Align zoom handles to region ends
+- 48bbc71 Restore zoom resize icon handles
+- 6fd888b Refine timeline zoom region styling
+- 3452bd6 Merge pull request #314 from imbhargav5/styling-changes
+- 26d441b Polish editor styling controls
+- a7bfb30 Improve inspector sidebar controls
+- dabc2b8 Update appcast for v0.2.26
+]]></description>
+            <enclosure url="https://github.com/imbhargav5/open-recorder/releases/download/v0.2.27/open-recorder-macos.zip" sparkle:edSignature="Q9ePZ+Ns8azIc/51KpgwSxOA2BtzSfN2YQ5qo6qjrhgUDgR/mgrx0voZ2jRBhhaYnGD7G+6cDBHOl2CDcQ3xCg==" length="40458907" type="application/octet-stream"/>
+        </item>
     </channel>
 </rss>
