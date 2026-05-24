@@ -109,14 +109,22 @@ struct TimelinePanel: View {
     private var timelineToolbar: some View {
         ZStack {
             HStack(spacing: 8) {
-                Text("16:9")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .frame(height: 28)
-                    .overlay { RoundedRectangle(cornerRadius: 7).stroke(Theme.border) }
+                TimelineTimeDisplay(currentTime: playback.currentTime, duration: playback.duration)
 
                 Spacer()
+
+                TimelineEditToolButton(
+                    symbolName: "scissors",
+                    title: "Split at playhead",
+                    isEnabled: playback.player != nil && playback.duration > 0
+                ) {
+                    edits.addClipSplit(at: playback.currentTime, duration: playback.duration)
+                }
+
+                Rectangle()
+                    .fill(Theme.borderStrong.opacity(0.46))
+                    .frame(width: 1, height: 22)
+                    .padding(.horizontal, 3)
 
                 TimelinePreviewSpeedButton(playback: playback)
 
@@ -128,7 +136,7 @@ struct TimelinePanel: View {
                 )
             }
 
-            TimelinePlaybackControl(playback: playback)
+            TimelineTransportControls(playback: playback)
         }
         .padding(TimelineMetrics.panelPadding)
         .zIndex(1)
@@ -211,14 +219,45 @@ struct TimelineTrackContent: View {
 }
 
 
-private struct TimelinePlaybackControl: View {
+private struct TimelineTransportControls: View {
+    var playback: VideoPlaybackController
+
+    var body: some View {
+        HStack(spacing: 10) {
+            TimelineToolbarIconButton(symbolName: "backward.end.fill", title: "Jump to start", isEnabled: isEnabled) {
+                playback.seek(to: 0)
+            }
+            TimelineToolbarIconButton(symbolName: "gobackward.10", title: "Back 10 frames", isEnabled: isEnabled) {
+                stepFrames(-10)
+            }
+            TimelinePlayPauseButton(playback: playback)
+            TimelineToolbarIconButton(symbolName: "goforward.10", title: "Forward 10 frames", isEnabled: isEnabled) {
+                stepFrames(10)
+            }
+            TimelineToolbarIconButton(symbolName: "forward.end.fill", title: "Jump to end", isEnabled: isEnabled) {
+                playback.seek(to: playback.duration)
+            }
+        }
+    }
+
+    private var isEnabled: Bool {
+        playback.player != nil
+    }
+
+    private func stepFrames(_ frameCount: Int) {
+        let frameDuration = 1.0 / 30.0
+        let target = playback.currentTime + Double(frameCount) * frameDuration
+        playback.seek(to: target)
+    }
+}
+
+private struct TimelinePlayPauseButton: View {
     var playback: VideoPlaybackController
     @State private var isHovering = false
 
     var body: some View {
         let title = playback.isPlaying ? "Pause" : "Play"
-
-        StudioButton(hitTarget: .circle, help: title) {
+        StudioButton(hitTarget: .rounded(10)) {
             playback.togglePlayback()
         } label: {
             Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
@@ -242,6 +281,65 @@ private struct TimelinePlaybackControl: View {
         .onHover { hovering in
             isHovering = hovering
         }
+    }
+}
+
+private struct TimelineToolbarIconButton: View {
+    var symbolName: String
+    var title: String
+    var isEnabled = true
+    var action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        StudioButton(hitTarget: .rounded(10), action: action) {
+            Image(systemName: symbolName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(isEnabled ? 0.90 : 0.35))
+                .frame(width: 30, height: 30)
+                .background(Color.white.opacity(isHovering && isEnabled ? 0.10 : 0.001), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .disabled(!isEnabled)
+        .accessibilityLabel(title)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+    }
+}
+
+private struct TimelineEditToolButton: View {
+    var symbolName: String
+    var title: String
+    var isEnabled = true
+    var action: () -> Void
+
+    var body: some View {
+        TimelineToolbarIconButton(symbolName: symbolName, title: title, isEnabled: isEnabled, action: action)
+    }
+}
+
+private struct TimelineTimeDisplay: View {
+    var currentTime: Double
+    var duration: Double
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(formatPlaybackTime(currentTime))
+                .foregroundStyle(Theme.fg.opacity(0.90))
+            Text("/")
+                .foregroundStyle(Theme.fgSubtle)
+            Text(formatPlaybackTime(duration))
+                .foregroundStyle(Theme.fgMuted)
+        }
+        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+        .padding(.horizontal, 9)
+        .frame(height: 28)
+        .background(Theme.overlay.opacity(0.86), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(Theme.borderSubtle, lineWidth: 1)
+        }
+        .accessibilityLabel("Playback time \(formatPlaybackTime(currentTime)) of \(formatPlaybackTime(duration))")
     }
 }
 
@@ -286,12 +384,18 @@ private struct TimelineZoomSlider: View {
         ElasticSlider(
             value: sliderValue,
             range: 0...1,
-            step: 0.01
-        ) { editing in
-            withAnimation(.easeOut(duration: 0.12)) {
-                isDragging = editing
-            }
-        }
+            step: 0.01,
+            onEditingChanged: { editing in
+                withAnimation(.easeOut(duration: 0.12)) {
+                    isDragging = editing
+                }
+            },
+            trackHeight: 7,
+            hitHeight: 28,
+            fillColor: Color.primary.opacity(0.92),
+            dragFillColor: Color(red: 0.48, green: 0.48, blue: 0.50),
+            setsValueFromPointerLocation: true
+        )
         .frame(width: 132)
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.45)
