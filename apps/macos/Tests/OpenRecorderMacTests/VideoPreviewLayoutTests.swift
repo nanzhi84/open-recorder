@@ -332,6 +332,25 @@ final class VideoPreviewLayoutTests: XCTestCase {
         XCTAssertGreaterThan(rect.maxY, recordingFrame.maxY)
     }
 
+    func testFacecamOverlayLayoutAllowsZeroMarginAtCanvasEdge() {
+        let stageSize = CGSize(width: 1000, height: 600)
+        let settings = FacecamSettings(
+            enabled: true,
+            shape: "circle",
+            size: 20,
+            cornerRadius: 24,
+            borderWidth: 4,
+            borderColor: "#FFFFFF",
+            margin: 0,
+            anchor: FacecamAnchor.bottomRight.rawValue
+        )
+
+        let rect = FacecamOverlayLayout.frame(in: stageSize, settings: settings)
+
+        XCTAssertEqual(rect.maxX, stageSize.width, accuracy: 0.001)
+        XCTAssertEqual(rect.maxY, stageSize.height, accuracy: 0.001)
+    }
+
     func testFacecamSettingsClampAndResolveAnchor() {
         let settings = FacecamSettings(
             enabled: true,

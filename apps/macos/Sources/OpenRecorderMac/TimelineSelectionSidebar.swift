@@ -164,6 +164,14 @@ struct TimelineSelectionSidebar: View {
                 step: 1,
                 onEditingChanged: handleUndoTransaction
             )
+            InspectorSlider(
+                title: "Margin",
+                valueText: "\(Int(clip.settings.clamped.margin.rounded()))%",
+                value: cameraMarginBinding(id: clip.id),
+                range: 0...12,
+                step: 1,
+                onEditingChanged: handleUndoTransaction
+            )
         }
 
         InspectorGroup(title: "Split", symbolName: "timeline.selection") {
@@ -349,6 +357,10 @@ struct TimelineSelectionSidebar: View {
 
     private func cameraBorderWidthBinding(id: TimelineRegionID) -> Binding<Double> {
         cameraBinding(id: id, keyPath: \.borderWidth, default: defaultFacecamSettings(enabled: true).borderWidth)
+    }
+
+    private func cameraMarginBinding(id: TimelineRegionID) -> Binding<Double> {
+        cameraBinding(id: id, keyPath: \.margin, default: defaultFacecamSettings(enabled: true).margin)
     }
 
     private func cameraAnchorBinding(id: TimelineRegionID) -> Binding<String> {
