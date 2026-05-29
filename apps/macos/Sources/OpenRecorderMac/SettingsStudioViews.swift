@@ -41,6 +41,7 @@ struct SettingsStudioView: View {
 
                 SettingsSection(title: "Recording") {
                     SettingsToggleRow(title: "Create zooms automatically", isOn: driver.autoZoomBinding)
+                    SettingsZoomPresetPicker(selection: driver.autoZoomAnimationPresetBinding)
                 }
 
                 SettingsSection(title: "Permissions") {
@@ -85,6 +86,55 @@ struct SettingsStudioView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.appBgMuted)
         .foregroundStyle(Theme.fg)
+    }
+}
+
+private struct SettingsZoomPresetPicker: View {
+    @Binding var selection: TimelineZoomAnimationPreset
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Auto zoom style")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.fg)
+                Spacer()
+                Text(selection.title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 6) {
+                ForEach(TimelineZoomAnimationPreset.allCases) { preset in
+                    let isSelected = selection == preset
+                    StudioButton(hitTarget: .rounded(7)) {
+                        selection = preset
+                    } label: {
+                        Text(preset.shortTitle)
+                            .font(.system(size: 10, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 30)
+                            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                            .background(isSelected ? Theme.accent.opacity(0.18) : Theme.overlay, in: RoundedRectangle(cornerRadius: 7))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 7)
+                                    .stroke(isSelected ? Theme.accent.opacity(0.42) : Theme.overlay, lineWidth: isSelected ? 1.5 : 1)
+                            }
+                    }
+                    .help(preset.title)
+                    .accessibilityLabel("Set auto zoom style to \(preset.title)")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+            }
+        }
+        .padding(10)
+        .background(Theme.overlay, in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Theme.overlay)
+        }
     }
 }
 

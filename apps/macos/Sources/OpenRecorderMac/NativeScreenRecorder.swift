@@ -42,7 +42,7 @@ final class NativeScreenRecorder: NSObject {
         source: CaptureSource,
         outputURL: URL,
         options: RecordingCaptureOptions
-    ) async throws {
+    ) async throws -> Date {
         let content = try await shareableContent()
         let filterAndSize = try makeFilter(for: source, from: content)
 
@@ -76,7 +76,7 @@ final class NativeScreenRecorder: NSObject {
         self.recordingDelegate = recordingDelegate
 
         try await startCapture(stream)
-        try await recordingDelegate.waitForStart()
+        return try await recordingDelegate.waitForStart()
     }
 
     static func makeStreamConfiguration(
@@ -314,20 +314,20 @@ final class NativeScreenRecorder: NSObject {
 
 @available(macOS 15.0, *)
 private final class RecordingOutputDelegate: NSObject, SCRecordingOutputDelegate, @unchecked Sendable {
-    private var startContinuation: CheckedContinuation<Void, Error>?
+    private var startContinuation: CheckedContinuation<Date, Error>?
     private var finishContinuation: CheckedContinuation<Void, Error>?
-    private var didStart = false
+    private var startedAt: Date?
     private var didFinish = false
     private var failure: Error?
 
-    func waitForStart() async throws {
+    func waitForStart() async throws -> Date {
         if let failure {
             throw failure
         }
-        if didStart {
-            return
+        if let startedAt {
+            return startedAt
         }
-        try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { continuation in
             startContinuation = continuation
         }
     }
@@ -353,8 +353,9 @@ private final class RecordingOutputDelegate: NSObject, SCRecordingOutputDelegate
     }
 
     func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
-        didStart = true
-        startContinuation?.resume()
+        let start = Date()
+        startedAt = start
+        startContinuation?.resume(returning: start)
         startContinuation = nil
     }
 

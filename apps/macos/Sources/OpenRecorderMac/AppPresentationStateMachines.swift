@@ -506,6 +506,7 @@ struct SettingsMachineState: Equatable {
     var serviceHealth: HealthPayload?
     var paths: AppPaths?
     var createZoomsAutomatically: Bool
+    var autoZoomAnimationPreset: TimelineZoomAnimationPreset = .balanced
     var statusMessage = ""
     var isRefreshingService = false
 }
@@ -517,6 +518,8 @@ enum SettingsEvent: Equatable {
     case serviceRefreshFailed(String)
     case autoZoomPreferenceSynced(Bool)
     case autoZoomPreferenceChanged(Bool)
+    case autoZoomAnimationPresetSynced(TimelineZoomAnimationPreset)
+    case autoZoomAnimationPresetChanged(TimelineZoomAnimationPreset)
     case folderOpenRequested(String?)
     case screenRecordingSettingsRequested
     case accessibilitySettingsRequested
@@ -526,6 +529,7 @@ enum SettingsEvent: Equatable {
 enum SettingsEffect: Equatable {
     case refreshService
     case persistAutoZoomPreference(Bool)
+    case persistAutoZoomAnimationPreset(TimelineZoomAnimationPreset)
     case openFolder(String)
     case openScreenRecordingSettings
     case openAccessibilitySettings
@@ -566,6 +570,15 @@ extension SettingsMachineState {
             createZoomsAutomatically = value
             return [.persistAutoZoomPreference(value)]
 
+        case .autoZoomAnimationPresetSynced(let preset):
+            autoZoomAnimationPreset = preset
+            return []
+
+        case .autoZoomAnimationPresetChanged(let preset):
+            guard autoZoomAnimationPreset != preset else { return [] }
+            autoZoomAnimationPreset = preset
+            return [.persistAutoZoomAnimationPreset(preset)]
+
         case .folderOpenRequested(let path):
             guard let path else { return [] }
             return [.openFolder(path)]
@@ -589,18 +602,23 @@ final class SettingsDriver {
 
     @ObservationIgnored private var refreshService: () -> Void = {}
     @ObservationIgnored private var persistAutoZoomPreference: (Bool) -> Void = { _ in }
+    @ObservationIgnored private var persistAutoZoomAnimationPreset: (TimelineZoomAnimationPreset) -> Void = { _ in }
     @ObservationIgnored private var openFolder: (String) -> Void = { _ in }
     @ObservationIgnored private var openScreenRecordingSettings: () -> Void = {}
     @ObservationIgnored private var openAccessibilitySettings: () -> Void = {}
     @ObservationIgnored private var showOnboarding: () -> Void = {}
 
-    init(createZoomsAutomatically: Bool) {
-        state = SettingsMachineState(createZoomsAutomatically: createZoomsAutomatically)
+    init(createZoomsAutomatically: Bool, autoZoomAnimationPreset: TimelineZoomAnimationPreset = .balanced) {
+        state = SettingsMachineState(
+            createZoomsAutomatically: createZoomsAutomatically,
+            autoZoomAnimationPreset: autoZoomAnimationPreset
+        )
     }
 
     func configure(
         refreshService: @escaping () -> Void = {},
         persistAutoZoomPreference: @escaping (Bool) -> Void = { _ in },
+        persistAutoZoomAnimationPreset: @escaping (TimelineZoomAnimationPreset) -> Void = { _ in },
         openFolder: @escaping (String) -> Void = { _ in },
         openScreenRecordingSettings: @escaping () -> Void = {},
         openAccessibilitySettings: @escaping () -> Void = {},
@@ -608,6 +626,7 @@ final class SettingsDriver {
     ) {
         self.refreshService = refreshService
         self.persistAutoZoomPreference = persistAutoZoomPreference
+        self.persistAutoZoomAnimationPreset = persistAutoZoomAnimationPreset
         self.openFolder = openFolder
         self.openScreenRecordingSettings = openScreenRecordingSettings
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -625,6 +644,13 @@ final class SettingsDriver {
         )
     }
 
+    var autoZoomAnimationPresetBinding: Binding<TimelineZoomAnimationPreset> {
+        Binding(
+            get: { self.state.autoZoomAnimationPreset },
+            set: { self.send(.autoZoomAnimationPresetChanged($0)) }
+        )
+    }
+
     private func perform(_ effects: [SettingsEffect]) {
         for effect in effects {
             switch effect {
@@ -632,6 +658,8 @@ final class SettingsDriver {
                 refreshService()
             case .persistAutoZoomPreference(let value):
                 persistAutoZoomPreference(value)
+            case .persistAutoZoomAnimationPreset(let preset):
+                persistAutoZoomAnimationPreset(preset)
             case .openFolder(let path):
                 openFolder(path)
             case .openScreenRecordingSettings:

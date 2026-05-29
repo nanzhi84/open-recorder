@@ -49,6 +49,11 @@ final class AppModel: ObservableObject {
             UserDefaults.standard.set(createZoomsAutomatically, forKey: Self.createZoomsAutomaticallyDefaultsKey)
         }
     }
+    @Published var autoZoomAnimationPreset: TimelineZoomAnimationPreset {
+        didSet {
+            UserDefaults.standard.set(autoZoomAnimationPreset.rawValue, forKey: Self.autoZoomAnimationPresetDefaultsKey)
+        }
+    }
     @Published var microphoneDevices: [CaptureDeviceInfo] = []
     @Published var cameraDevices: [CaptureDeviceInfo] = []
     @Published var selectedMicrophoneDeviceID: String?
@@ -76,15 +81,23 @@ final class AppModel: ObservableObject {
     private let onboardingStore: OnboardingStateStore
     private let screenSelectionPresenter: ScreenSelectionPresenting
     private let screenshotCapture: @MainActor (CaptureSource, URL) throws -> Void
+    private let startRecordingCapture: @MainActor (CaptureSource, URL, RecordingCaptureOptions) async throws -> Date
     private let stopRecordingCapture: @MainActor () async throws -> URL
     private let rememberScreenshot: @Sendable (URL) throws -> Void
     private let trashProjectFile: @MainActor (URL) throws -> Void
     private let forgetProject: @Sendable (String) throws -> Void
+    private let prepareCameraPermission: (@MainActor () async -> Bool)?
+    private let prepareFacecamRecording: (@MainActor (String?) async throws -> Void)?
+    private let startFacecamRecording: (@MainActor (URL, String?) async throws -> Date)?
+    private let stopFacecamRecording: (@MainActor () async throws -> URL?)?
+    private let cancelFacecamRecording: (@MainActor () -> Void)?
     private let facecamRecorder = FacecamRecorder()
     private let cursorTelemetryRecorder = CursorTelemetryRecorder()
     private let captureDeviceProvider = CaptureDeviceProvider()
     private var nativeWindowCommandHandler: (NativeWindowCommand) -> Void = { _ in }
+    private var runRecordingCountdown: @MainActor (CaptureSource) async throws -> Void = { _ in }
     private static let createZoomsAutomaticallyDefaultsKey = "recording.createZoomsAutomatically"
+    private static let autoZoomAnimationPresetDefaultsKey = "recording.autoZoomAnimationPreset"
 
     init(
         screenRecordingPermission: ScreenRecordingPermission = ScreenRecordingPermission(),
@@ -93,7 +106,14 @@ final class AppModel: ObservableObject {
         screenSelectionPresenter: ScreenSelectionPresenting = ScreenSelectionOverlayController(),
         captureUIHideDelayNanoseconds: UInt64 = 180_000_000,
         screenshotCapture: (@MainActor (CaptureSource, URL) throws -> Void)? = nil,
+        startRecordingCapture: (@MainActor (CaptureSource, URL, RecordingCaptureOptions) async throws -> Date)? = nil,
         stopRecording: (@MainActor () async throws -> URL)? = nil,
+        prepareCameraPermission: (@MainActor () async -> Bool)? = nil,
+        prepareFacecamRecording: (@MainActor (String?) async throws -> Void)? = nil,
+        startFacecamRecording: (@MainActor (URL, String?) async throws -> Date)? = nil,
+        stopFacecamRecording: (@MainActor () async throws -> URL?)? = nil,
+        cancelFacecamRecording: (@MainActor () -> Void)? = nil,
+        runRecordingCountdown: (@MainActor (CaptureSource) async throws -> Void)? = nil,
         rememberScreenshot: (@Sendable (URL) throws -> Void)? = nil,
         trashProjectFile: (@MainActor (URL) throws -> Void)? = nil,
         forgetProject: (@Sendable (String) throws -> Void)? = nil
@@ -101,6 +121,9 @@ final class AppModel: ObservableObject {
         let service = RustServiceClient()
         let capture = CaptureController(screenRecordingPermission: screenRecordingPermission)
         self.createZoomsAutomatically = UserDefaults.standard.object(forKey: Self.createZoomsAutomaticallyDefaultsKey) as? Bool ?? true
+        self.autoZoomAnimationPreset = TimelineZoomAnimationPreset.storedValue(
+            UserDefaults.standard.string(forKey: Self.autoZoomAnimationPresetDefaultsKey)
+        )
         self.service = service
         self.screenRecordingPermission = screenRecordingPermission
         self.accessibilityPermission = accessibilityPermission
@@ -111,9 +134,17 @@ final class AppModel: ObservableObject {
         self.screenshotCapture = screenshotCapture ?? { source, outputURL in
             try capture.takeScreenshot(source: source, outputURL: outputURL)
         }
+        self.startRecordingCapture = startRecordingCapture ?? { source, outputURL, options in
+            try await capture.startRecording(source: source, outputURL: outputURL, options: options)
+        }
         self.stopRecordingCapture = stopRecording ?? {
             try await capture.stopRecording()
         }
+        self.prepareCameraPermission = prepareCameraPermission
+        self.prepareFacecamRecording = prepareFacecamRecording
+        self.startFacecamRecording = startFacecamRecording
+        self.stopFacecamRecording = stopFacecamRecording
+        self.cancelFacecamRecording = cancelFacecamRecording
         self.rememberScreenshot = rememberScreenshot ?? { outputURL in
             let _: PreparedFile = try service.call(
                 "rememberScreenshot",
@@ -131,6 +162,9 @@ final class AppModel: ObservableObject {
                 params: ["path": path],
                 as: ForgetProjectResult.self
             )
+        }
+        self.runRecordingCountdown = runRecordingCountdown ?? { [countdownOverlayController] source in
+            try await countdownOverlayController.run(for: source)
         }
         self.screenRecordingPermissionState = screenRecordingPermission.currentState()
         self.accessibilityPermissionState = accessibilityPermission.currentState()
@@ -253,6 +287,9 @@ final class AppModel: ObservableObject {
             persistAutoZoomPreference: { [weak self] value in
                 self?.createZoomsAutomatically = value
             },
+            persistAutoZoomAnimationPreset: { [weak self] preset in
+                self?.autoZoomAnimationPreset = preset
+            },
             openFolder: { [weak self] path in
                 self?.openPath(path)
             },
@@ -303,6 +340,7 @@ final class AppModel: ObservableObject {
             }
         )
         appShell.settings.send(.autoZoomPreferenceSynced(createZoomsAutomatically))
+        appShell.settings.send(.autoZoomAnimationPresetSynced(autoZoomAnimationPreset))
         syncAppShellMirror()
         syncCaptureOptionsMirror()
     }
@@ -814,51 +852,36 @@ final class AppModel: ObservableObject {
                 }
             }
 
-            try await countdownOverlayController.run(for: selectedSource)
+            try await runRecordingCountdown(selectedSource)
             guard !Task.isCancelled else { return }
 
             dispatch(.recordingStarting(selectedSource))
 
             activeFacecamURL = nil
             activeFacecamStartedAt = nil
-            var facecamURL: URL?
-            var facecamStartTask: Task<Date, Error>?
             if options.includeCamera {
                 let url = facecamOutputURL(for: outputURL)
                 if FileManager.default.fileExists(atPath: url.path) {
                     try FileManager.default.removeItem(at: url)
                 }
-                facecamURL = url
                 let cameraDeviceID = options.cameraDeviceID
-                facecamStartTask = Task { @MainActor in
-                    try await self.facecamRecorder.start(outputURL: url, cameraDeviceID: cameraDeviceID)
-                }
-            }
-
-            cursorTelemetryRecorder.start(for: selectedSource)
-            let screenStartedAt = Date()
-            try await capture.startRecording(
-                source: selectedSource,
-                outputURL: outputURL,
-                options: options
-            )
-            activeScreenStartedAt = screenStartedAt
-
-            if let facecamStartTask {
                 do {
-                    activeFacecamStartedAt = try await facecamStartTask.value
-                    activeFacecamURL = facecamURL
+                    activeFacecamStartedAt = try await startFacecam(outputURL: url, cameraDeviceID: cameraDeviceID)
+                    activeFacecamURL = url
                 } catch {
                     captureOptions.send(.cameraDisabled)
                     syncCaptureOptionsMirror()
-                    if let facecamURL {
-                        try? FileManager.default.removeItem(at: facecamURL)
-                    }
+                    options = currentCaptureOptions
+                    try? FileManager.default.removeItem(at: url)
                     activeFacecamURL = nil
                     activeFacecamStartedAt = nil
                     statusMessage = "Recording without facecam: \(error.localizedDescription)"
                 }
             }
+
+            cursorTelemetryRecorder.start(for: selectedSource)
+            let screenStartedAt = try await startRecordingCapture(selectedSource, outputURL, options)
+            activeScreenStartedAt = screenStartedAt
 
             currentVideoURL = outputURL
             currentScreenshotURL = nil
@@ -882,7 +905,7 @@ final class AppModel: ObservableObject {
                 restoreRecordingSetup(source: selectedSource, message: "Recording canceled.")
             }
         } catch {
-            facecamRecorder.cancel()
+            cancelFacecam()
             if let partialURL = activeFacecamURL {
                 try? FileManager.default.removeItem(at: partialURL)
             } else {
@@ -920,7 +943,7 @@ final class AppModel: ObservableObject {
     private func runRecordingStopFlow(source: CaptureSource?) async {
         do {
             let outputURL = try await stopRecordingCapture()
-            let stoppedFacecamURL = try? await facecamRecorder.stop()
+            let stoppedFacecamURL = try? await stopFacecam()
             let cursorTelemetryURL = cursorTelemetryRecorder.stop(videoURL: outputURL)
             currentVideoURL = outputURL
             currentScreenshotURL = nil
@@ -1261,7 +1284,7 @@ final class AppModel: ObservableObject {
         }
 
         let duration = await videoDuration(for: videoURL)
-        let zooms = AutoZoomGenerator.generate(from: cursorTelemetryURL, duration: duration)
+        let zooms = AutoZoomGenerator.generate(from: cursorTelemetryURL, duration: duration, preset: autoZoomAnimationPreset)
         return TimelineEditSnapshot(zoomRegions: zooms)
     }
 
@@ -1505,6 +1528,10 @@ final class AppModel: ObservableObject {
     }
 
     private func prepareCameraPermissionForFacecam() async -> Bool {
+        if let prepareCameraPermission {
+            return await prepareCameraPermission()
+        }
+
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         if status == .notDetermined {
             let granted = await AVCaptureDevice.requestAccess(for: .video)
@@ -1546,13 +1573,39 @@ final class AppModel: ObservableObject {
     private func prepareFacecam(cameraDeviceID: String?) async throws {
         facecamPrewarmTask?.cancel()
         facecamPrewarmTask = nil
-        try await facecamRecorder.prepare(cameraDeviceID: cameraDeviceID)
+        if let prepareFacecamRecording {
+            try await prepareFacecamRecording(cameraDeviceID)
+        } else {
+            try await facecamRecorder.prepare(cameraDeviceID: cameraDeviceID)
+        }
+    }
+
+    private func startFacecam(outputURL: URL, cameraDeviceID: String?) async throws -> Date {
+        if let startFacecamRecording {
+            return try await startFacecamRecording(outputURL, cameraDeviceID)
+        }
+        return try await facecamRecorder.start(outputURL: outputURL, cameraDeviceID: cameraDeviceID)
+    }
+
+    private func stopFacecam() async throws -> URL? {
+        if let stopFacecamRecording {
+            return try await stopFacecamRecording()
+        }
+        return try await facecamRecorder.stop()
+    }
+
+    private func cancelFacecam() {
+        if let cancelFacecamRecording {
+            cancelFacecamRecording()
+        } else {
+            facecamRecorder.cancel()
+        }
     }
 
     private func cancelFacecamPrewarm() {
         facecamPrewarmTask?.cancel()
         facecamPrewarmTask = nil
-        facecamRecorder.cancel()
+        cancelFacecam()
     }
 
     private func facecamOutputURL(for screenURL: URL) -> URL {

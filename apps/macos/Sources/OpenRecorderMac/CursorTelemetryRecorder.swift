@@ -104,6 +104,28 @@ struct CursorTelemetryTrack: Equatable {
         return CGPoint(x: weightedX / totalWeight, y: weightedY / totalWeight)
     }
 
+    func normalizedPointAtOrBefore(seconds: Double) -> CGPoint? {
+        guard !samples.isEmpty, seconds.isFinite else { return nil }
+
+        let timestamp = min(max(seconds * 1_000, Double(samples[0].timestamp)), Double(samples[samples.count - 1].timestamp))
+        var low = 0
+        var high = samples.count - 1
+        while low < high {
+            let mid = (low + high + 1) / 2
+            if Double(samples[mid].timestamp) <= timestamp {
+                low = mid
+            } else {
+                high = mid - 1
+            }
+        }
+
+        let sample = samples[low]
+        return CGPoint(
+            x: min(max(Double(sample.x) / Double(width), 0), 1),
+            y: min(max(Double(sample.y) / Double(height), 0), 1)
+        )
+    }
+
     private func normalizedTimestamp(milliseconds: Double, loops: Bool) -> Double {
         guard let first = samples.first?.timestamp,
               let last = samples.last?.timestamp else {

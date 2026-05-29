@@ -93,6 +93,7 @@ struct TimelineZoomRegion: Identifiable, Codable, Equatable, Hashable {
     var focusX: Double = 0.5
     var focusY: Double = 0.5
     var mode: TimelineZoomMode = .manual
+    var animationPreset: TimelineZoomAnimationPreset = .balanced
     var sourceClickTimestamp: Int?
 
     init(
@@ -102,6 +103,7 @@ struct TimelineZoomRegion: Identifiable, Codable, Equatable, Hashable {
         focusX: Double = 0.5,
         focusY: Double = 0.5,
         mode: TimelineZoomMode = .manual,
+        animationPreset: TimelineZoomAnimationPreset = .balanced,
         sourceClickTimestamp: Int? = nil
     ) {
         self.id = id
@@ -110,6 +112,7 @@ struct TimelineZoomRegion: Identifiable, Codable, Equatable, Hashable {
         self.focusX = focusX
         self.focusY = focusY
         self.mode = mode
+        self.animationPreset = animationPreset
         self.sourceClickTimestamp = sourceClickTimestamp
     }
 
@@ -120,6 +123,7 @@ struct TimelineZoomRegion: Identifiable, Codable, Equatable, Hashable {
         case focusX
         case focusY
         case mode
+        case animationPreset
         case sourceClickTimestamp
     }
 
@@ -131,6 +135,7 @@ struct TimelineZoomRegion: Identifiable, Codable, Equatable, Hashable {
         focusX = try container.decodeIfPresent(Double.self, forKey: .focusX) ?? 0.5
         focusY = try container.decodeIfPresent(Double.self, forKey: .focusY) ?? 0.5
         mode = try container.decodeIfPresent(TimelineZoomMode.self, forKey: .mode) ?? .manual
+        animationPreset = try container.decodeIfPresent(TimelineZoomAnimationPreset.self, forKey: .animationPreset) ?? .balanced
         sourceClickTimestamp = try container.decodeIfPresent(Int.self, forKey: .sourceClickTimestamp)
     }
 }
@@ -294,12 +299,19 @@ struct TimelineEditSnapshot: Codable, Equatable, Hashable {
         zoomRegions.sorted { $0.span.start < $1.span.start }.last { $0.span.contains(time) }
     }
 
-    func activeZoomEffect(at time: Double) -> TimelineZoomEffect? {
+    func activeZoomEffect(at time: Double, cursorTrack: CursorTelemetryTrack? = nil) -> TimelineZoomEffect? {
         guard let zoom = activeZoom(at: time) else { return nil }
+        let depth = TimelineZoomAnimator.animatedDepth(for: zoom, at: time)
+        let focus = TimelineZoomFocusResolver.focus(
+            for: zoom,
+            at: time,
+            depth: depth,
+            cursorTrack: cursorTrack
+        )
         return TimelineZoomEffect(
-            depth: TimelineZoomAnimator.animatedDepth(for: zoom, at: time),
-            focusX: zoom.focusX,
-            focusY: zoom.focusY
+            depth: depth,
+            focusX: focus.x,
+            focusY: focus.y
         )
     }
 
@@ -391,7 +403,12 @@ enum TimelineZoomCanvasTransform {
             .concatenating(CGAffineTransform(translationX: focus.x, y: focus.y))
     }
 
-    static func activeEffect(edits: TimelineEditSnapshot, editPlan: TimelineExportEditPlan, outputTime: Double) -> TimelineZoomEffect? {
+    static func activeEffect(
+        edits: TimelineEditSnapshot,
+        editPlan: TimelineExportEditPlan,
+        outputTime: Double,
+        cursorTrack: CursorTelemetryTrack? = nil
+    ) -> TimelineZoomEffect? {
         guard outputTime.isFinite else { return nil }
         let activeZoom = edits.zoomRegions
             .sorted { $0.span.start < $1.span.start }
@@ -405,41 +422,111 @@ enum TimelineZoomCanvasTransform {
         let start = editPlan.outputTime(forSourceTime: zoom.span.start) ?? zoom.span.start
         let end = editPlan.outputTime(forSourceTime: zoom.span.end) ?? zoom.span.end
         let outputSpan = TimelineSpan(start: start, end: end)
-        let progress = TimelineZoomAnimator.animationProgress(for: outputSpan, at: outputTime)
+        let progress = TimelineZoomAnimator.animationProgress(for: outputSpan, preset: zoom.animationPreset, at: outputTime)
+        let depth = 1 + (max(1, zoom.depth) - 1) * progress
+        let sourceTime = editPlan.sourceTime(forOutputTime: outputTime) ?? outputTime
+        let focus = TimelineZoomFocusResolver.focus(
+            for: zoom,
+            at: sourceTime,
+            depth: depth,
+            cursorTrack: cursorTrack
+        )
         return TimelineZoomEffect(
-            depth: 1 + (max(1, zoom.depth) - 1) * progress,
-            focusX: zoom.focusX,
-            focusY: zoom.focusY
+            depth: depth,
+            focusX: focus.x,
+            focusY: focus.y
         )
     }
 }
 
 enum TimelineZoomAnimator {
-    static let rampInSeconds = 0.22
-    static let rampOutSeconds = 0.25
+    static let rampInSeconds = TimelineZoomAnimationPreset.balanced.configuration.rampInSeconds
+    static let rampOutSeconds = TimelineZoomAnimationPreset.balanced.configuration.rampOutSeconds
 
     static func animatedDepth(for zoom: TimelineZoomRegion, at time: Double) -> Double {
-        let progress = animationProgress(for: zoom.span, at: time)
+        let progress = animationProgress(for: zoom, at: time)
         return 1 + (max(1, zoom.depth) - 1) * progress
     }
 
     static func animationProgress(for span: TimelineSpan, at time: Double) -> Double {
+        animationProgress(for: span, preset: .balanced, at: time)
+    }
+
+    static func animationProgress(for zoom: TimelineZoomRegion, at time: Double) -> Double {
+        animationProgress(for: zoom.span, preset: zoom.animationPreset, at: time)
+    }
+
+    static func animationProgress(for span: TimelineSpan, preset: TimelineZoomAnimationPreset, at time: Double) -> Double {
         guard span.duration > 0, span.contains(time) else { return 0 }
 
-        let rampIn = min(rampInSeconds, span.duration * 0.4)
-        let rampOut = min(rampOutSeconds, span.duration * 0.4)
+        let config = preset.configuration
+        let rampIn = min(config.rampInSeconds, span.duration * 0.4)
+        let rampOut = min(config.rampOutSeconds, span.duration * 0.4)
         if rampIn > 0, time < span.start + rampIn {
-            return smoothstep((time - span.start) / rampIn)
+            return config.easing.value((time - span.start) / rampIn)
         }
         if rampOut > 0, time > span.end - rampOut {
-            return smoothstep((span.end - time) / rampOut)
+            return config.easing.value((span.end - time) / rampOut)
         }
         return 1
     }
+}
 
-    private static func smoothstep(_ value: Double) -> Double {
-        let x = min(max(value, 0), 1)
-        return x * x * (3 - 2 * x)
+enum TimelineZoomFocusResolver {
+    static func focus(
+        for zoom: TimelineZoomRegion,
+        at time: Double,
+        depth: Double,
+        cursorTrack: CursorTelemetryTrack?
+    ) -> CGPoint {
+        let config = zoom.animationPreset.configuration
+        let staticFocus = CGPoint(
+            x: clamped(zoom.focusX, in: config.focusClampRange),
+            y: clamped(zoom.focusY, in: config.focusClampRange)
+        )
+        guard config.followsCursor,
+              let cursorTrack,
+              !cursorTrack.samples.isEmpty,
+              time.isFinite else {
+            return staticFocus
+        }
+
+        let rampOut = min(config.rampOutSeconds, zoom.span.duration * 0.4)
+        let holdEnd = max(zoom.span.start, zoom.span.end - rampOut)
+        let effectiveTime = min(max(time, zoom.span.start), holdEnd)
+        guard let cursorPoint = cursorTrack.normalizedPointAtOrBefore(seconds: effectiveTime) else {
+            return staticFocus
+        }
+
+        let safeZoneRatio = min(max(config.safeZoneRatio, 0), 0.49)
+        let visibleHalfSpan = 1 / (2 * max(depth, 1))
+        let safeInset = visibleHalfSpan * 2 * safeZoneRatio
+        var focus = staticFocus
+        let cursorFocus = CGPoint(
+            x: clamped(cursorPoint.x, in: config.focusClampRange),
+            y: clamped(cursorPoint.y, in: config.focusClampRange)
+        )
+
+        let safeLeft = focus.x - visibleHalfSpan + safeInset
+        let safeRight = focus.x + visibleHalfSpan - safeInset
+        let safeTop = focus.y - visibleHalfSpan + safeInset
+        let safeBottom = focus.y + visibleHalfSpan - safeInset
+
+        if cursorFocus.x < safeLeft || cursorFocus.x > safeRight {
+            focus.x = cursorFocus.x
+        }
+        if cursorFocus.y < safeTop || cursorFocus.y > safeBottom {
+            focus.y = cursorFocus.y
+        }
+
+        return CGPoint(
+            x: clamped(focus.x, in: config.focusClampRange),
+            y: clamped(focus.y, in: config.focusClampRange)
+        )
+    }
+
+    private static func clamped(_ value: Double, in range: ClosedRange<Double>) -> Double {
+        min(max(value, range.lowerBound), range.upperBound)
     }
 }
 
@@ -462,7 +549,7 @@ enum TimelineEditEvent: Equatable {
     case applySnapshot(TimelineEditSnapshot)
     case reset
     case add(TimelineRegionKind, currentTime: Double, duration: Double)
-    case regenerateAutoZoomsRequested(videoURL: URL?, duration: Double)
+    case regenerateAutoZoomsRequested(videoURL: URL?, duration: Double, preset: TimelineZoomAnimationPreset)
     case replaceAutoZooms([TimelineZoomRegion])
     case addClipSplit(currentTime: Double, duration: Double)
     case ensureCameraClips(duration: Double, fallback: FacecamSettings?)
@@ -483,12 +570,13 @@ enum TimelineEditEvent: Equatable {
     case deepenZoom(id: TimelineRegionID)
     case updateZoomDepth(id: TimelineRegionID, depth: Double)
     case updateZoomFocus(id: TimelineRegionID, focusX: Double?, focusY: Double?)
+    case updateZoomAnimationPreset(id: TimelineRegionID, preset: TimelineZoomAnimationPreset)
     case updateAnnotationText(id: TimelineRegionID, text: String)
     case removeClipSplit(splitTime: Double, duration: Double)
 }
 
 enum TimelineEditEffect: Equatable {
-    case generateAutoZooms(URL, duration: Double)
+    case generateAutoZooms(URL, duration: Double, preset: TimelineZoomAnimationPreset)
 }
 
 extension TimelineEditState {
@@ -510,12 +598,12 @@ extension TimelineEditState {
             add(kind, at: currentTime, duration: duration)
             return []
 
-        case .regenerateAutoZoomsRequested(let videoURL, let duration):
+        case .regenerateAutoZoomsRequested(let videoURL, let duration, let preset):
             guard let videoURL else {
                 statusMessage = "Open a recording before generating automatic zooms."
                 return []
             }
-            return [.generateAutoZooms(videoURL, duration: duration)]
+            return [.generateAutoZooms(videoURL, duration: duration, preset: preset)]
 
         case .replaceAutoZooms(let generatedZooms):
             replaceAutoZooms(with: generatedZooms)
@@ -595,6 +683,10 @@ extension TimelineEditState {
 
         case .updateZoomFocus(let id, let focusX, let focusY):
             updateZoomFocus(id: id, focusX: focusX, focusY: focusY)
+            return []
+
+        case .updateZoomAnimationPreset(let id, let preset):
+            updateZoomAnimationPreset(id: id, preset: preset)
             return []
 
         case .updateAnnotationText(let id, let text):
@@ -968,6 +1060,13 @@ extension TimelineEditState {
         }
     }
 
+    private mutating func updateZoomAnimationPreset(id: TimelineRegionID, preset: TimelineZoomAnimationPreset) {
+        mutate(&snapshot.zoomRegions, id: id) { region in
+            region.animationPreset = preset
+        }
+        statusMessage = "Set zoom style to \(preset.title)."
+    }
+
     private mutating func updateAnnotationText(id: TimelineRegionID, text: String) {
         mutate(&snapshot.annotationRegions, id: id) { $0.text = text }
     }
@@ -1236,8 +1335,8 @@ final class TimelineEditDriver {
         resetHistory()
     }
 
-    func regenerateAutoZooms(from videoURL: URL?, duration: Double) {
-        send(.regenerateAutoZoomsRequested(videoURL: videoURL, duration: duration))
+    func regenerateAutoZooms(from videoURL: URL?, duration: Double, preset: TimelineZoomAnimationPreset) {
+        send(.regenerateAutoZoomsRequested(videoURL: videoURL, duration: duration, preset: preset))
     }
 
     func replaceAutoZooms(with generatedZooms: [TimelineZoomRegion]) {
@@ -1320,6 +1419,10 @@ final class TimelineEditDriver {
         send(.updateZoomFocus(id: id, focusX: focusX, focusY: focusY))
     }
 
+    func updateZoomAnimationPreset(id: TimelineRegionID, preset: TimelineZoomAnimationPreset) {
+        send(.updateZoomAnimationPreset(id: id, preset: preset))
+    }
+
     func updateAnnotationText(id: TimelineRegionID, text: String) {
         send(.updateAnnotationText(id: id, text: text))
     }
@@ -1371,9 +1474,9 @@ final class TimelineEditDriver {
     private func perform(_ effects: [TimelineEditEffect]) {
         for effect in effects {
             switch effect {
-            case .generateAutoZooms(let videoURL, let duration):
+            case .generateAutoZooms(let videoURL, let duration, let preset):
                 let telemetryURL = CursorTelemetryRecorder.telemetryURL(for: videoURL)
-                let generated = AutoZoomGenerator.generate(from: telemetryURL, duration: duration)
+                let generated = AutoZoomGenerator.generate(from: telemetryURL, duration: duration, preset: preset)
                 replaceAutoZooms(with: generated)
             }
         }

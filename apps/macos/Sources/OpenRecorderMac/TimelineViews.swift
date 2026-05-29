@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import Charts
 import CoreGraphics
 import SwiftUI
 import UniformTypeIdentifiers
@@ -745,9 +746,9 @@ struct TimelineClipRow: View {
             .overlay(alignment: .bottom) {
                 if let waveformSamples, !waveformSamples.isEmpty, !isDeleted {
                     TimelineWaveformPreview(samples: waveformSamples)
-                        .frame(height: 27)
-                        .padding(.horizontal, 13)
-                        .padding(.bottom, 11)
+                        .frame(height: 35)
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 8)
                         .allowsHitTesting(false)
                 }
             }
@@ -835,60 +836,82 @@ struct TimelineWaveformPreview: View {
     var samples: [Double]
 
     var body: some View {
-        Canvas { context, size in
-            let levels = TimelineWaveformBarRenderer.resampledLevels(from: samples, width: size.width)
-            guard !levels.isEmpty, size.width > 0, size.height > 0 else { return }
-
-            let spacing: CGFloat = size.width < 140 ? 1.1 : 1.25
-            let barWidth = max(1.15, min(2.6, (size.width - spacing * CGFloat(levels.count - 1)) / CGFloat(levels.count)))
-            let step = barWidth + spacing
-            let waveformWidth = CGFloat(levels.count) * barWidth + CGFloat(max(levels.count - 1, 0)) * spacing
-            let leadingInset = max(0, (size.width - waveformWidth) / 2)
-            let centerY = size.height / 2
-            let baselineRect = CGRect(x: 0, y: centerY - 0.5, width: size.width, height: 1)
-
-            context.fill(
-                Path(roundedRect: baselineRect, cornerRadius: 0.5),
-                with: .linearGradient(
-                    Gradient(colors: [
-                        Color.white.opacity(0.02),
-                        Color.white.opacity(0.16),
-                        Color.white.opacity(0.02)
-                    ]),
-                    startPoint: CGPoint(x: 0, y: centerY),
-                    endPoint: CGPoint(x: size.width, y: centerY)
-                )
-            )
-
-            let maxBarHeight = max(1, size.height - 4)
-
-            for (index, sample) in levels.enumerated() {
-                let clampedSample = max(0, min(sample, 1))
-                let level = CGFloat(pow(clampedSample, 0.42))
-                let barHeight = max(4, level * maxBarHeight)
-                let x = leadingInset + CGFloat(index) * step
-                let y = centerY - barHeight / 2
-                let rect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
-                let barPath = RoundedRectangle(cornerRadius: barWidth / 2, style: .continuous).path(in: rect)
-                let glowRect = rect.insetBy(dx: -0.6, dy: -1.6)
-                let glowPath = RoundedRectangle(cornerRadius: max(1, glowRect.width / 2), style: .continuous).path(in: glowRect)
-
-                context.fill(glowPath, with: .color(Theme.timelineHandle.opacity(0.10)))
-
-                context.fill(
-                    barPath,
-                    with: .linearGradient(
-                        Gradient(colors: [
-                            Color.white.opacity(0.92),
-                            Color.white.opacity(0.72),
-                            Theme.timelineHandle.opacity(0.66),
-                            Theme.timelineClipBorder.opacity(0.46)
-                        ]),
-                        startPoint: CGPoint(x: rect.midX, y: rect.minY),
-                        endPoint: CGPoint(x: rect.midX, y: rect.maxY)
+        GeometryReader { proxy in
+            let chartSamples = TimelineWaveformChartSample.samples(from: samples, width: proxy.size.width)
+            if !chartSamples.isEmpty {
+                Chart(chartSamples) { sample in
+                    AreaMark(
+                        x: .value("Position", sample.position),
+                        yStart: .value("Lower amplitude", -sample.amplitude),
+                        yEnd: .value("Upper amplitude", sample.amplitude)
                     )
-                )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.94),
+                                Color.white.opacity(0.80),
+                                Theme.timelineHandle.opacity(0.68),
+                                Theme.timelineClipBorder.opacity(0.42)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                    LineMark(
+                        x: .value("Position", sample.position),
+                        y: .value("Upper crest", sample.amplitude)
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(Color.white.opacity(0.28))
+                    .lineStyle(StrokeStyle(lineWidth: 0.8, lineCap: .round, lineJoin: .round))
+
+                    LineMark(
+                        x: .value("Position", sample.position),
+                        y: .value("Lower crest", -sample.amplitude)
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(Theme.timelineHandle.opacity(0.18))
+                    .lineStyle(StrokeStyle(lineWidth: 0.8, lineCap: .round, lineJoin: .round))
+                }
+                .chartXAxis(.hidden)
+                .chartYAxis(.hidden)
+                .chartLegend(.hidden)
+                .chartXScale(domain: 0...max(chartSamples.last?.position ?? 1, 1))
+                .chartYScale(domain: -1...1)
+                .chartPlotStyle { plotArea in
+                    plotArea
+                        .background(Color.clear)
+                        .overlay(alignment: .center) {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.14))
+                                .frame(height: 1)
+                        }
+                }
+                .accessibilityHidden(true)
             }
+        }
+    }
+}
+
+struct TimelineWaveformChartSample: Identifiable {
+    var id: Int { index }
+    var index: Int
+    var position: Int
+    var amplitude: Double
+
+    static func samples(from samples: [Double], width: CGFloat) -> [TimelineWaveformChartSample] {
+        let levels = TimelineWaveformBarRenderer.resampledLevels(from: samples, width: width)
+        let smoothedLevels = TimelineWaveformBarRenderer.smoothedDisplayLevels(from: levels)
+        return smoothedLevels.enumerated().map { index, sample in
+            let clampedSample = min(max(sample, 0), 1)
+            let shapedAmplitude = max(0.07, pow(clampedSample, 0.54))
+            return TimelineWaveformChartSample(
+                index: index,
+                position: index,
+                amplitude: min(max(shapedAmplitude, 0), 1)
+            )
         }
     }
 }
@@ -897,7 +920,7 @@ enum TimelineWaveformBarRenderer {
     static func resampledLevels(from samples: [Double], width: CGFloat) -> [Double] {
         guard width > 0, !samples.isEmpty else { return [] }
 
-        let targetCount = max(1, min(samples.count, Int(width / 2.4)))
+        let targetCount = max(2, min(samples.count, Int(width / 3.2)))
         guard targetCount < samples.count else {
             return samples.map { min(max($0, 0), 1) }
         }
@@ -908,6 +931,20 @@ enum TimelineWaveformBarRenderer {
             return samples[start..<min(end, samples.count)].reduce(0) { partial, sample in
                 max(partial, min(max(sample, 0), 1))
             }
+        }
+    }
+
+    static func smoothedDisplayLevels(from levels: [Double]) -> [Double] {
+        guard levels.count > 2 else {
+            return levels.map { min(max($0, 0), 1) }
+        }
+
+        return levels.indices.map { index in
+            let previous = levels[max(index - 1, 0)]
+            let current = levels[index]
+            let next = levels[min(index + 1, levels.count - 1)]
+            let weightedLevel = previous * 0.22 + current * 0.56 + next * 0.22
+            return min(max(weightedLevel, 0), 1)
         }
     }
 }

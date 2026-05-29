@@ -624,6 +624,77 @@ final class AppModelStateTests: XCTestCase {
         XCTAssertNil(model.windowCommand)
     }
 
+    func testRecordingStartWaitsForFacecamBeforeScreenCapture() async throws {
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("facecam-ordered-recording-\(UUID().uuidString).mp4")
+        let facecamURL = outputURL
+            .deletingPathExtension()
+            .appendingPathExtension("facecam.mov")
+        defer {
+            try? FileManager.default.removeItem(at: outputURL)
+            try? FileManager.default.removeItem(at: facecamURL)
+        }
+
+        let facecamStartedAt = Date(timeIntervalSince1970: 10)
+        let screenStartedAt = Date(timeIntervalSince1970: 10.5)
+        var events: [String] = []
+        var facecamContinuation: CheckedContinuation<Date, Error>?
+
+        let model = AppModel(
+            screenRecordingPermission: makeScreenRecordingPermission(isGranted: true),
+            captureUIHideDelayNanoseconds: 0,
+            startRecordingCapture: { _, outputURL, _ in
+                events.append("screen-start")
+                try Data("mp4".utf8).write(to: outputURL)
+                return screenStartedAt
+            },
+            stopRecording: {
+                outputURL
+            },
+            prepareCameraPermission: {
+                true
+            },
+            prepareFacecamRecording: { _ in },
+            startFacecamRecording: { _, _ in
+                events.append("facecam-start")
+                return try await withCheckedThrowingContinuation { continuation in
+                    facecamContinuation = continuation
+                }
+            },
+            stopFacecamRecording: {
+                facecamURL
+            },
+            runRecordingCountdown: { _ in }
+        )
+        let source = makeSource()
+        model.captureOptions.state.includeCamera = true
+        model.setCaptureStateForTesting(.ready(.recording, source))
+
+        model.captureMachine.send(.recordingFilePrepared(source, outputURL))
+        await waitForCondition {
+            facecamContinuation != nil
+        }
+
+        XCTAssertEqual(events, ["facecam-start"])
+        let continuation = try XCTUnwrap(facecamContinuation)
+        continuation.resume(returning: facecamStartedAt)
+
+        await waitForCondition {
+            events == ["facecam-start", "screen-start"] && model.hudState == .recording(source)
+        }
+
+        XCTAssertEqual(events, ["facecam-start", "screen-start"])
+
+        model.stopRecording()
+        await waitForCondition {
+            model.windowCommand?.action == .showStudio
+        }
+
+        let editorSession = try XCTUnwrap(model.windowCommand?.editorSession)
+        XCTAssertEqual(editorSession.recordingSession?.facecamVideoPath, facecamURL.path)
+        XCTAssertEqual(editorSession.recordingSession?.facecamOffsetMs, -500)
+    }
+
     func testEditorSessionCanCarryRecordingSessionMetadata() {
         let url = URL(fileURLWithPath: "/tmp/example-recording.mp4")
         let recordingSession = RecordingSession(

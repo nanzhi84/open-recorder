@@ -208,6 +208,7 @@ struct TimelineSelectionSidebar: View {
             if let zoom = edits.zoomRegions.first(where: { $0.id == id }) {
                 InspectorGroup(title: "Zoom", symbolName: "plus.magnifyingglass") {
                     TimelineSelectionInfoRow(title: "Type", value: zoom.mode == .auto ? "Auto" : "Manual")
+                    TimelineZoomStylePicker(preset: zoomAnimationPresetBinding(id: id))
                     TimelineZoomDepthPicker(depth: zoomDepthBinding(id: id))
                 }
 
@@ -323,6 +324,13 @@ struct TimelineSelectionSidebar: View {
         Binding(
             get: { edits.zoomRegions.first(where: { $0.id == id })?.depth ?? 1 },
             set: { edits.updateZoomDepth(id: id, depth: $0) }
+        )
+    }
+
+    private func zoomAnimationPresetBinding(id: TimelineRegionID) -> Binding<TimelineZoomAnimationPreset> {
+        Binding(
+            get: { edits.zoomRegions.first(where: { $0.id == id })?.animationPreset ?? .balanced },
+            set: { edits.updateZoomAnimationPreset(id: id, preset: $0) }
         )
     }
 
@@ -519,6 +527,53 @@ private struct TimelineZoomDepthPicker: View {
                     }
                     .help("Set zoom depth to \(TimelineZoomDepth.label(value))")
                     .accessibilityLabel("Set zoom depth to \(TimelineZoomDepth.label(value))")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+    }
+}
+
+private struct TimelineZoomStylePicker: View {
+    @Binding var preset: TimelineZoomAnimationPreset
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Style")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(preset.title)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.secondary.opacity(0.78))
+            }
+
+            HStack(spacing: 5) {
+                ForEach(TimelineZoomAnimationPreset.allCases) { value in
+                    let isSelected = preset == value
+                    StudioButton(hitTarget: .rounded(7)) {
+                        if !isSelected {
+                            preset = value
+                        }
+                    } label: {
+                        Text(value.shortTitle)
+                            .font(.system(size: 10, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 30)
+                            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                            .background(isSelected ? Theme.accent.opacity(0.18) : Theme.overlay, in: RoundedRectangle(cornerRadius: 7))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 7)
+                                    .stroke(isSelected ? Theme.accent.opacity(0.42) : Theme.overlay, lineWidth: isSelected ? 1.5 : 1)
+                            }
+                    }
+                    .help("Set zoom style to \(value.title)")
+                    .accessibilityLabel("Set zoom style to \(value.title)")
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }

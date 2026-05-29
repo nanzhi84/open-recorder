@@ -263,7 +263,7 @@ final class CaptureController: ObservableObject {
         source: CaptureSource,
         outputURL: URL,
         options: RecordingCaptureOptions
-    ) async throws {
+    ) async throws -> Date {
         guard !isRecording else { throw CaptureControllerError.recordingAlreadyRunning }
 
         try FileManager.default.createDirectory(
@@ -274,7 +274,7 @@ final class CaptureController: ObservableObject {
         if source.kind == .display || source.kind == .window || source.kind == .area {
             try ensureScreenRecordingPermission()
             do {
-                try await startNativeRecording(
+                return try await startNativeRecording(
                     source: source,
                     outputURL: outputURL,
                     options: options
@@ -285,13 +285,12 @@ final class CaptureController: ObservableObject {
                 }
 
                 try ensureScreenRecordingPermission()
-                try await startNativeRecording(
+                return try await startNativeRecording(
                     source: source,
                     outputURL: outputURL,
                     options: options
                 )
             }
-            return
         }
 
         try ensureScreenRecordingPermission()
@@ -326,6 +325,7 @@ final class CaptureController: ObservableObject {
         recordingProcess = process
         activeRecordingURL = outputURL
         isRecording = true
+        return Date()
     }
 
     func stopRecording() async throws -> URL {
@@ -427,10 +427,10 @@ final class CaptureController: ObservableObject {
         source: CaptureSource,
         outputURL: URL,
         options: RecordingCaptureOptions
-    ) async throws {
+    ) async throws -> Date {
         let recorder = NativeScreenRecorder()
         let stagedURL = stagedRecordingURL(for: outputURL)
-        try await recorder.start(
+        let startedAt = try await recorder.start(
             source: source,
             outputURL: stagedURL,
             options: options
@@ -439,6 +439,7 @@ final class CaptureController: ObservableObject {
         activeRecordingURL = outputURL
         activeStagedRecordingURL = stagedURL
         isRecording = true
+        return startedAt
     }
 
     private func stagedRecordingURL(for outputURL: URL) -> URL {

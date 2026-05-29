@@ -7,9 +7,16 @@ enum CaptureDeviceSelectorWindowMetrics {
     static let minHeight: CGFloat = 260
 }
 
+private enum CaptureDeviceDialogSelection: Equatable {
+    case noInput
+    case systemDefault
+    case device(String)
+}
+
 struct MicrophoneSelectorWindowView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismissWindow) private var dismissWindow
+    @State private var pendingSelection: CaptureDeviceDialogSelection = .systemDefault
     private var options: CaptureOptionsState {
         model.captureOptions.state
     }
@@ -42,33 +49,33 @@ struct MicrophoneSelectorWindowView: View {
             ScrollView(.vertical) {
                 VStack(spacing: 6) {
                     StudioButton(hitTarget: .rounded(8)) {
-                        selectNoMicrophone()
+                        pendingSelection = .noInput
                     } label: {
                         microphoneRow(
                             title: "No Microphone",
                             subtitle: "Do not record microphone audio",
-                            isSelected: !options.includeMicrophone
+                            isSelected: pendingSelection == .noInput
                         )
                     }
 
                     StudioButton(hitTarget: .rounded(8)) {
-                        selectMicrophone(nil)
+                        pendingSelection = .systemDefault
                     } label: {
                         microphoneRow(
                             title: "System Default",
                             subtitle: "Use the current macOS default",
-                            isSelected: options.includeMicrophone && options.selectedMicrophoneDeviceID == nil
+                            isSelected: pendingSelection == .systemDefault
                         )
                     }
 
                     ForEach(options.microphoneDevices) { device in
                         StudioButton(hitTarget: .rounded(8)) {
-                            selectMicrophone(device.id)
+                            pendingSelection = .device(device.id)
                         } label: {
                             microphoneRow(
                                 title: device.name,
                                 subtitle: device.isDefault ? "Current macOS default" : "Microphone",
-                                isSelected: options.includeMicrophone && options.selectedMicrophoneDeviceID == device.id
+                                isSelected: pendingSelection == .device(device.id)
                             )
                         }
                     }
@@ -103,6 +110,17 @@ struct MicrophoneSelectorWindowView: View {
                         .background(Theme.overlay, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .foregroundStyle(.secondary)
+
+                StudioButton(hitTarget: .rounded(8)) {
+                    applyMicrophoneSelection()
+                } label: {
+                    Text("OK")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(height: 34)
+                        .padding(.horizontal, 16)
+                        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 8))
+                        .foregroundStyle(.white)
+                }
             }
             .padding(14)
         }
@@ -114,16 +132,33 @@ struct MicrophoneSelectorWindowView: View {
         }
         .padding(16)
         .background(Theme.appBg.ignoresSafeArea())
+        .onAppear {
+            resetPendingMicrophoneSelection()
+        }
     }
 
-    private func selectMicrophone(_ deviceID: String?) {
-        model.selectMicrophoneDevice(deviceID)
+    private func applyMicrophoneSelection() {
+        switch pendingSelection {
+        case .noInput:
+            model.selectNoMicrophoneInput()
+        case .systemDefault:
+            model.selectMicrophoneDevice(nil)
+        case .device(let deviceID):
+            model.selectMicrophoneDevice(deviceID)
+        }
         dismissWindow(id: "microphone-selector")
     }
 
-    private func selectNoMicrophone() {
-        model.selectNoMicrophoneInput()
-        dismissWindow(id: "microphone-selector")
+    private func resetPendingMicrophoneSelection() {
+        guard options.includeMicrophone else {
+            pendingSelection = .systemDefault
+            return
+        }
+        if let selectedMicrophoneDeviceID = options.selectedMicrophoneDeviceID {
+            pendingSelection = .device(selectedMicrophoneDeviceID)
+        } else {
+            pendingSelection = .systemDefault
+        }
     }
 
     private func microphoneRow(title: String, subtitle: String, isSelected: Bool) -> some View {
@@ -157,6 +192,7 @@ struct MicrophoneSelectorWindowView: View {
 struct CameraSelectorWindowView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismissWindow) private var dismissWindow
+    @State private var pendingSelection: CaptureDeviceDialogSelection = .systemDefault
     private var options: CaptureOptionsState {
         model.captureOptions.state
     }
@@ -189,33 +225,33 @@ struct CameraSelectorWindowView: View {
             ScrollView(.vertical) {
                 VStack(spacing: 6) {
                     StudioButton(hitTarget: .rounded(8)) {
-                        selectNoCamera()
+                        pendingSelection = .noInput
                     } label: {
                         cameraRow(
                             title: "No Camera",
                             subtitle: "Do not record facecam video",
-                            isSelected: !options.includeCamera
+                            isSelected: pendingSelection == .noInput
                         )
                     }
 
                     StudioButton(hitTarget: .rounded(8)) {
-                        selectCamera(nil)
+                        pendingSelection = .systemDefault
                     } label: {
                         cameraRow(
                             title: "System Default",
                             subtitle: "Use the current macOS default",
-                            isSelected: options.includeCamera && options.selectedCameraDeviceID == nil
+                            isSelected: pendingSelection == .systemDefault
                         )
                     }
 
                     ForEach(options.cameraDevices) { device in
                         StudioButton(hitTarget: .rounded(8)) {
-                            selectCamera(device.id)
+                            pendingSelection = .device(device.id)
                         } label: {
                             cameraRow(
                                 title: device.name,
                                 subtitle: device.isDefault ? "Current macOS default" : "Camera",
-                                isSelected: options.includeCamera && options.selectedCameraDeviceID == device.id
+                                isSelected: pendingSelection == .device(device.id)
                             )
                         }
                     }
@@ -250,6 +286,17 @@ struct CameraSelectorWindowView: View {
                         .background(Theme.overlay, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .foregroundStyle(.secondary)
+
+                StudioButton(hitTarget: .rounded(8)) {
+                    applyCameraSelection()
+                } label: {
+                    Text("OK")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(height: 34)
+                        .padding(.horizontal, 16)
+                        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 8))
+                        .foregroundStyle(.white)
+                }
             }
             .padding(14)
         }
@@ -261,16 +308,33 @@ struct CameraSelectorWindowView: View {
         }
         .padding(16)
         .background(Theme.appBg.ignoresSafeArea())
+        .onAppear {
+            resetPendingCameraSelection()
+        }
     }
 
-    private func selectCamera(_ deviceID: String?) {
-        model.selectCameraDevice(deviceID)
+    private func applyCameraSelection() {
+        switch pendingSelection {
+        case .noInput:
+            model.selectNoCameraInput()
+        case .systemDefault:
+            model.selectCameraDevice(nil)
+        case .device(let deviceID):
+            model.selectCameraDevice(deviceID)
+        }
         dismissWindow(id: "camera-selector")
     }
 
-    private func selectNoCamera() {
-        model.selectNoCameraInput()
-        dismissWindow(id: "camera-selector")
+    private func resetPendingCameraSelection() {
+        guard options.includeCamera else {
+            pendingSelection = .systemDefault
+            return
+        }
+        if let selectedCameraDeviceID = options.selectedCameraDeviceID {
+            pendingSelection = .device(selectedCameraDeviceID)
+        } else {
+            pendingSelection = .systemDefault
+        }
     }
 
     private func cameraRow(title: String, subtitle: String, isSelected: Bool) -> some View {

@@ -111,6 +111,8 @@ struct VideoPreviewPanel: View {
     var onCropVideo: () -> Void = {}
     var onRequestClearSelection: () -> Void = {}
     @State private var isPreviewAspectDropdownPresented = false
+    @State private var cursorTrack: CursorTelemetryTrack?
+    @State private var loadedCursorTelemetryPath: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -144,9 +146,13 @@ struct VideoPreviewPanel: View {
         .studioEditorPaneChrome()
         .onAppear {
             syncPlaybackURL(videoURL)
+            loadCursorTelemetryTrack()
         }
         .onChange(of: videoURL) { _, newURL in
             syncPlaybackURL(newURL)
+        }
+        .task(id: cursorTelemetryURL?.path) {
+            loadCursorTelemetryTrack()
         }
     }
 
@@ -156,6 +162,22 @@ struct VideoPreviewPanel: View {
         } else {
             playback.clear()
         }
+    }
+
+    @MainActor
+    private func loadCursorTelemetryTrack() {
+        guard let cursorTelemetryURL else {
+            loadedCursorTelemetryPath = nil
+            cursorTrack = nil
+            return
+        }
+        guard loadedCursorTelemetryPath != cursorTelemetryURL.path else { return }
+        loadedCursorTelemetryPath = cursorTelemetryURL.path
+        guard let payload = try? CursorTelemetryPayload.load(from: cursorTelemetryURL) else {
+            cursorTrack = nil
+            return
+        }
+        cursorTrack = CursorTelemetryTrack(payload: payload)
     }
 
     private var previewControlRow: some View {
@@ -221,7 +243,7 @@ struct VideoPreviewPanel: View {
                 in: proxy.size,
                 paddingValue: padding
             )
-            let zoomEffect = timelineEdits.snapshot.activeZoomEffect(at: playback.currentTime)
+            let zoomEffect = timelineEdits.snapshot.activeZoomEffect(at: playback.currentTime, cursorTrack: cursorTrack)
             let facecamZoomTransform = PreviewStageLayout.previewFullStageZoomTransform(
                 effect: zoomEffect,
                 stageSize: proxy.size,
@@ -249,6 +271,7 @@ struct VideoPreviewPanel: View {
                         edits: timelineEdits.snapshot,
                         cursorTelemetryURL: cursorTelemetryURL,
                         cursorSettings: cursorSettings,
+                        cursorTrack: cursorTrack,
                         cropSelection: cropSelection,
                         sourceSize: playback.naturalVideoSize,
                         letterboxFill: previewLetterboxFill
@@ -649,6 +672,7 @@ struct PlaybackPreview: View {
     var edits: TimelineEditSnapshot
     var cursorTelemetryURL: URL?
     var cursorSettings: CursorOverlaySettings = .hidden
+    var cursorTrack: CursorTelemetryTrack?
     var cropSelection: VideoCropSelection = .fullFrame
     var sourceSize: CGSize = .zero
     var letterboxFill: VideoPreviewLetterboxFill = .black
@@ -670,7 +694,7 @@ struct PlaybackPreview: View {
                 width: centeredOffset.x - cropRect.minX * scale,
                 height: centeredOffset.y - cropRect.minY * scale
             )
-            let zoomEffect = edits.activeZoomEffect(at: playback.currentTime)
+            let zoomEffect = edits.activeZoomEffect(at: playback.currentTime, cursorTrack: cursorTrack)
             let sourceZoomTransform = PreviewStageLayout.previewSourceZoomTransform(
                 effect: zoomEffect,
                 sourceDisplaySize: sourceDisplaySize

@@ -25,6 +25,7 @@ final class AutoZoomGeneratorTests: XCTestCase {
         XCTAssertEqual(zooms[0].span.start, 0.75, accuracy: 0.001)
         XCTAssertEqual(zooms[0].span.end, 2.35, accuracy: 0.001)
         XCTAssertEqual(zooms[0].depth, 1.75, accuracy: 0.001)
+        XCTAssertEqual(zooms[0].animationPreset, .balanced)
         XCTAssertEqual(zooms[0].focusX, 0.25, accuracy: 0.001)
         XCTAssertEqual(zooms[0].focusY, 0.60, accuracy: 0.001)
         XCTAssertEqual(zooms[0].sourceClickTimestamp, 1_000)
@@ -102,7 +103,122 @@ final class AutoZoomGeneratorTests: XCTestCase {
         let zoom = try JSONDecoder().decode(TimelineZoomRegion.self, from: Data(json.utf8))
 
         XCTAssertEqual(zoom.mode, .manual)
+        XCTAssertEqual(zoom.animationPreset, .balanced)
         XCTAssertNil(zoom.sourceClickTimestamp)
+    }
+
+    func testPresetChangesGeneratedTimingAndDepth() {
+        let payload = CursorTelemetryPayload(
+            width: 1000,
+            height: 1000,
+            samples: [
+                CursorTelemetrySample(x: 250, y: 300, timestamp: 1_150, cursorType: "arrow"),
+                CursorTelemetrySample(x: 252, y: 302, timestamp: 1_350, cursorType: "arrow")
+            ],
+            clicks: [CursorTelemetryClick(x: 250, y: 300, timestamp: 1_000, button: "left", clickCount: 2)]
+        )
+
+        let subtle = AutoZoomGenerator.generate(from: payload, duration: 5, preset: .subtle)
+        let snappy = AutoZoomGenerator.generate(from: payload, duration: 5, preset: .snappy)
+
+        XCTAssertEqual(subtle.count, 1)
+        XCTAssertEqual(snappy.count, 1)
+        XCTAssertEqual(subtle[0].animationPreset, .subtle)
+        XCTAssertEqual(snappy[0].animationPreset, .snappy)
+        XCTAssertEqual(subtle[0].depth, 1.35, accuracy: 0.001)
+        XCTAssertEqual(snappy[0].depth, 1.85, accuracy: 0.001)
+        XCTAssertNotEqual(subtle[0].span, snappy[0].span)
+    }
+
+    func testPresetControlsRapidClickMerging() {
+        let payload = CursorTelemetryPayload(
+            width: 1000,
+            height: 1000,
+            samples: [],
+            clicks: [
+                CursorTelemetryClick(x: 100, y: 200, timestamp: 1_000, button: "left", clickCount: 1),
+                CursorTelemetryClick(x: 700, y: 800, timestamp: 2_200, button: "left", clickCount: 1)
+            ]
+        )
+
+        let snappy = AutoZoomGenerator.generate(from: payload, duration: 6, preset: .snappy)
+        let cinematic = AutoZoomGenerator.generate(from: payload, duration: 6, preset: .cinematic)
+
+        XCTAssertEqual(snappy.count, 2)
+        XCTAssertEqual(cinematic.count, 1)
+        XCTAssertEqual(cinematic[0].focusX, 0.70, accuracy: 0.001)
+    }
+
+    func testSubtleSkipsLowConfidenceClickThatSnappyAccepts() {
+        let payload = CursorTelemetryPayload(
+            width: 1000,
+            height: 1000,
+            samples: [],
+            clicks: [CursorTelemetryClick(x: 250, y: 300, timestamp: 1_000, button: "left", clickCount: 1)]
+        )
+
+        XCTAssertTrue(AutoZoomGenerator.generate(from: payload, duration: 5, preset: .subtle).isEmpty)
+        XCTAssertEqual(AutoZoomGenerator.generate(from: payload, duration: 5, preset: .snappy).count, 1)
+    }
+
+    func testGuidedPresetCreatesSustainedDropdownRegion() {
+        let payload = CursorTelemetryPayload(
+            width: 1000,
+            height: 1000,
+            samples: [
+                CursorTelemetrySample(x: 500, y: 560, timestamp: 1_250, cursorType: "arrow"),
+                CursorTelemetrySample(x: 502, y: 650, timestamp: 1_700, cursorType: "arrow"),
+                CursorTelemetrySample(x: 504, y: 760, timestamp: 2_500, cursorType: "arrow")
+            ],
+            clicks: [CursorTelemetryClick(x: 500, y: 500, timestamp: 1_000, button: "left", clickCount: 1)]
+        )
+
+        let zooms = AutoZoomGenerator.generate(from: payload, duration: 5, preset: .guided)
+
+        XCTAssertEqual(zooms.count, 1)
+        XCTAssertEqual(zooms[0].animationPreset, .guided)
+        XCTAssertGreaterThan(zooms[0].span.duration, 3.0)
+    }
+
+    func testGuidedPresetCreatesCursorOnlyDwellRegion() {
+        let payload = CursorTelemetryPayload(
+            width: 1000,
+            height: 1000,
+            samples: [
+                CursorTelemetrySample(x: 500, y: 500, timestamp: 1_000, cursorType: "arrow"),
+                CursorTelemetrySample(x: 504, y: 525, timestamp: 1_150, cursorType: "arrow"),
+                CursorTelemetrySample(x: 508, y: 550, timestamp: 1_300, cursorType: "arrow"),
+                CursorTelemetrySample(x: 510, y: 580, timestamp: 1_450, cursorType: "arrow"),
+                CursorTelemetrySample(x: 512, y: 610, timestamp: 1_600, cursorType: "arrow"),
+                CursorTelemetrySample(x: 514, y: 635, timestamp: 1_750, cursorType: "arrow"),
+                CursorTelemetrySample(x: 516, y: 660, timestamp: 1_900, cursorType: "arrow"),
+                CursorTelemetrySample(x: 518, y: 680, timestamp: 2_050, cursorType: "arrow")
+            ],
+            clicks: []
+        )
+
+        let guided = AutoZoomGenerator.generate(from: payload, duration: 5, preset: .guided)
+        let balanced = AutoZoomGenerator.generate(from: payload, duration: 5, preset: .balanced)
+
+        XCTAssertEqual(guided.count, 1)
+        XCTAssertEqual(guided[0].animationPreset, .guided)
+        XCTAssertNil(guided[0].sourceClickTimestamp)
+        XCTAssertEqual(guided[0].focusX, 0.509, accuracy: 0.001)
+        XCTAssertEqual(guided[0].focusY, 0.590, accuracy: 0.001)
+        XCTAssertTrue(balanced.isEmpty)
+    }
+
+    func testGuidedPresetSkipsIdleCursorOnlySamples() {
+        let payload = CursorTelemetryPayload(
+            width: 1000,
+            height: 1000,
+            samples: (0..<20).map { index in
+                CursorTelemetrySample(x: 500, y: 500, timestamp: 1_000 + index * 100, cursorType: "arrow")
+            },
+            clicks: []
+        )
+
+        XCTAssertTrue(AutoZoomGenerator.generate(from: payload, duration: 5, preset: .guided).isEmpty)
     }
 
     func testLegacyStringClickTelemetryDecodesAsEmptyClicks() throws {
@@ -151,5 +267,41 @@ final class AutoZoomGeneratorTests: XCTestCase {
         XCTAssertGreaterThan(TimelineZoomAnimator.animatedDepth(for: zoom, at: 1.1), 1)
         XCTAssertEqual(TimelineZoomAnimator.animatedDepth(for: zoom, at: 2), 2, accuracy: 0.001)
         XCTAssertLessThan(TimelineZoomAnimator.animatedDepth(for: zoom, at: 2.95), 2)
+    }
+
+    func testCinematicZoomRampsMoreSlowlyThanSnappy() {
+        let snappy = TimelineZoomRegion(span: TimelineSpan(start: 1, end: 4), depth: 2, animationPreset: .snappy)
+        let cinematic = TimelineZoomRegion(span: TimelineSpan(start: 1, end: 4), depth: 2, animationPreset: .cinematic)
+
+        XCTAssertGreaterThan(
+            TimelineZoomAnimator.animatedDepth(for: snappy, at: 1.2),
+            TimelineZoomAnimator.animatedDepth(for: cinematic, at: 1.2)
+        )
+    }
+
+    func testGuidedFocusHoldsFollowsAndFreezesDuringZoomOut() {
+        let payload = CursorTelemetryPayload(
+            width: 1000,
+            height: 1000,
+            samples: [
+                CursorTelemetrySample(x: 550, y: 500, timestamp: 1_200, cursorType: "arrow"),
+                CursorTelemetrySample(x: 800, y: 500, timestamp: 2_000, cursorType: "arrow"),
+                CursorTelemetrySample(x: 200, y: 500, timestamp: 3_800, cursorType: "arrow")
+            ],
+            clicks: []
+        )
+        let track = CursorTelemetryTrack(payload: payload)
+        let zoom = TimelineZoomRegion(
+            span: TimelineSpan(start: 1, end: 4),
+            depth: 2,
+            focusX: 0.5,
+            focusY: 0.5,
+            animationPreset: .guided
+        )
+        let edits = TimelineEditSnapshot(zoomRegions: [zoom])
+
+        XCTAssertEqual(edits.activeZoomEffect(at: 1.25, cursorTrack: track)?.focusX ?? 0, 0.5, accuracy: 0.001)
+        XCTAssertEqual(edits.activeZoomEffect(at: 2.1, cursorTrack: track)?.focusX ?? 0, 0.8, accuracy: 0.001)
+        XCTAssertEqual(edits.activeZoomEffect(at: 3.9, cursorTrack: track)?.focusX ?? 0, 0.8, accuracy: 0.001)
     }
 }

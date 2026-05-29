@@ -727,7 +727,7 @@ enum VideoExportRenderer {
                 sourceSize: normalizedSize,
                 edits: edits,
                 editPlan: editPlan,
-                cursorTrack: nil,
+                cursorTrack: cursorTrack,
                 cursorSettings: .hidden
             )
         }
@@ -808,7 +808,8 @@ enum VideoExportRenderer {
             to: contentLayer,
             outputSize: outputSize,
             edits: edits,
-            editPlan: editPlan
+            editPlan: editPlan,
+            cursorTrack: cursorTrack
         )
         return AVVideoCompositionCoreAnimationTool(postProcessingAsVideoLayer: videoLayer, in: parentLayer)
     }
@@ -817,7 +818,8 @@ enum VideoExportRenderer {
         to layer: CALayer,
         outputSize: CGSize,
         edits: TimelineEditSnapshot,
-        editPlan: TimelineExportEditPlan
+        editPlan: TimelineExportEditPlan,
+        cursorTrack: CursorTelemetryTrack?
     ) {
         guard edits.zoomRegions.isEmpty == false,
               editPlan.outputDuration > 0 else {
@@ -836,7 +838,8 @@ enum VideoExportRenderer {
             let effect = TimelineZoomCanvasTransform.activeEffect(
                 edits: edits,
                 editPlan: editPlan,
-                outputTime: outputTime
+                outputTime: outputTime,
+                cursorTrack: cursorTrack
             )
             let transform = TimelineZoomCanvasTransform.transform(for: effect, in: rect, flipsY: true)
             values.append(CATransform3DMakeAffineTransform(transform))
