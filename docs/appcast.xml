@@ -279,5 +279,20 @@
 ]]></description>
             <enclosure url="https://github.com/imbhargav5/open-recorder/releases/download/v0.2.30/open-recorder-macos.zip" sparkle:edSignature="D9QTmJ+8f67K0+Jki3U2aUt+/HugF5y1dj3pew5vaIArZ/CaAEqHM4HL3Be6n9fFgy7lHJBOXOXV1ADvqs86Dw==" length="41103026" type="application/octet-stream"/>
         </item>
+        <item>
+            <title>Version 0.2.31</title>
+            <pubDate>Fri, 12 Jun 2026 11:55:30 GMT</pubDate>
+            <sparkle:version>0.2.31</sparkle:version>
+            <sparkle:shortVersionString>0.2.31</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+## Commits since v0.2.30
+
+- febe53d Merge pull request #350 from iDankest/main
+- 6b43ec3 fix: zoom effects lost on export and abrupt zoom transitions
+- 272215e Update appcast for v0.2.30
+]]></description>
+            <enclosure url="https://github.com/imbhargav5/open-recorder/releases/download/v0.2.31/open-recorder-macos.zip" sparkle:edSignature="onIuIc1f/UICbO+YoBD6TMTPBIuZEUHBVdn8Oq5amvlThkPMvuEPMny5EFRV5t5dDjEKMATp0qdgWoFh6AuRBA==" length="41104148" type="application/octet-stream"/>
+        </item>
     </channel>
 </rss>
