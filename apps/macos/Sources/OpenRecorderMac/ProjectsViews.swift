@@ -423,7 +423,7 @@ func formattedProjectDate(_ value: String) -> String {
     }
 
     let formatter = DateFormatter()
-    formatter.locale = .current
+    formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.calendar = Calendar(identifier: .gregorian)
     formatter.dateFormat = "MMM d, h:mm a"
     return formatter.string(from: date)
