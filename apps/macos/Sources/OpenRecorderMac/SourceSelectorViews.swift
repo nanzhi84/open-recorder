@@ -155,12 +155,12 @@ struct SourceSelectorCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Choose what to share")
                         .font(.system(size: 18, weight: .semibold))
-                    Text(selectorDescription)
+                    Text(L10n.string(selectorDescription))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("\(allSources.filter { $0.kind != .area }.count) sources")
+                Text(L10n.string("%d sources", allSources.filter { $0.kind != .area }.count))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 9)
@@ -287,7 +287,7 @@ struct StudioSegmentedTabButton: View {
         StudioButton(hitTarget: .rounded(7), action: action) {
             HStack(spacing: 6) {
                 Image(systemName: symbolName)
-                Text(title)
+                Text(L10n.string(title))
             }
             .font(.system(size: 12, weight: .semibold))
             .frame(maxWidth: .infinity)
@@ -415,7 +415,7 @@ struct SourceTile: View {
                         .background(Theme.overlay, in: RoundedRectangle(cornerRadius: 5))
                 }
             }
-            Text(source.subtitle)
+            Text(L10n.string(source.subtitle))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -499,9 +499,9 @@ struct SourceEmptyState: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 64, height: 64)
                 .background(Theme.overlay, in: RoundedRectangle(cornerRadius: 14))
-            Text(sourceTab == .area ? "Draw a capture area" : "No sources available")
+            Text(L10n.string(sourceTab == .area ? "Draw a capture area" : "No sources available"))
                 .font(.system(size: 15, weight: .semibold))
-            Text(sourceTab == .area ? "Select the part of the screen you want to capture." : "Try a different tab or make sure the source is visible.")
+            Text(L10n.string(sourceTab == .area ? "Select the part of the screen you want to capture." : "Try a different tab or make sure the source is visible."))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
             if sourceTab == .area {

@@ -1,9 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import type { ReactElement } from "react";
 
 const docsUrl: string = "https://docs.openrecorder.xyz/";
 const sourceUrl: string = "https://github.com/imbhargav5/open-recorder";
+
+export const metadata: Metadata = {
+  title: "Open Recorder | 原生 macOS 录屏工作台",
+  description:
+    "Open Recorder 是一个开源 macOS 录屏、截图和原生编辑工具，使用 Swift 与 Rust 构建。",
+};
 
 type ProofPoint = readonly [value: string, label: string];
 
@@ -25,65 +32,65 @@ type ArchitectureNote = Readonly<{
 }>;
 
 const proofPoints: readonly ProofPoint[] = [
-  ["Native macOS", "Swift capture UI with system privacy flows"],
-  ["Local-first", "Recordings and projects stay on your Mac"],
-  ["Open source", "Apache 2.0 with a small Swift + Rust stack"],
-  ["Editor included", "Zooms, camera clips, cursor overlays, and exports"],
+  ["原生 macOS", "Swift 捕捉界面，沿用系统隐私授权流程"],
+  ["本地优先", "录制、截图和项目文件保留在你的 Mac 上"],
+  ["开源", "Apache 2.0，轻量 Swift + Rust 技术栈"],
+  ["内置编辑器", "缩放、摄像头片段、光标叠加和导出"],
 ];
 
 const featureHighlights: readonly LandingContentBlock[] = [
   {
-    title: "Capture exactly what matters",
-    eyebrow: "Display, window, or region",
-    copy: "Choose a full display, a single app window, or draw a precise area with microphone, system audio, camera, cursor, and click controls.",
+    title: "只捕捉真正重要的内容",
+    eyebrow: "显示器、窗口或区域",
+    copy: "选择完整显示器、单个应用窗口，或手绘精确区域；录制前可配置麦克风、系统声音、摄像头、光标和点击效果。",
   },
   {
-    title: "Shape the story on the timeline",
-    eyebrow: "Zooms, clips, cursor, camera",
-    copy: "Add manual or automatic zoom sections, split clips, tune playback speed, style cursor motion, and place facecam segments independently.",
+    title: "在时间线上整理叙事节奏",
+    eyebrow: "缩放、片段、光标、摄像头",
+    copy: "添加手动或自动缩放区段，分割片段，调整播放速度，设置光标运动样式，并独立摆放摄像头片段。",
   },
   {
-    title: "Compose the final handoff",
-    eyebrow: "Crop, aspect, screenshot, export",
-    copy: "Crop and reframe videos for fixed aspect layouts, compose screenshots on styled backgrounds, and export MOV, MP4, GIF, or PNG outputs.",
+    title: "完成可交付的最终素材",
+    eyebrow: "裁剪、比例、截图、导出",
+    copy: "为固定比例布局裁剪和重构视频，在样式化背景上合成截图，并导出 MOV、MP4、GIF 或 PNG。",
   },
 ];
 
 const workflow: readonly WorkflowStep[] = [
   {
     step: "01",
-    title: "Choose the source",
-    copy: "Pick a display, window, or hand-drawn region with a capture flow built for macOS.",
+    title: "选择来源",
+    copy: "选择显示器、窗口或手绘区域，使用贴合 macOS 的捕捉流程。",
   },
   {
     step: "02",
-    title: "Record or screenshot",
-    copy: "Save clips to Movies and screenshots to Pictures with project metadata created automatically.",
+    title: "录制或截图",
+    copy: "视频保存到 Movies，截图保存到 Pictures，并自动生成项目元数据。",
   },
   {
     step: "03",
-    title: "Edit the timeline",
-    copy: "Refine clips with trims, speed changes, zoom effects, cursor overlays, and independently controlled camera segments.",
+    title: "编辑时间线",
+    copy: "通过裁剪、速度调整、缩放效果、光标叠加和独立摄像头片段完善素材。",
   },
   {
     step: "04",
-    title: "Export or compose",
-    copy: "Export MOV, MP4, GIF, or PNG assets with crop and aspect controls, styled backgrounds, and screenshot composition.",
+    title: "导出或合成",
+    copy: "导出 MOV、MP4、GIF 或 PNG，支持裁剪、比例、样式背景和截图合成。",
   },
 ];
 
 const architectureNotes: readonly ArchitectureNote[] = [
   {
-    label: "Swift app",
-    value: "Capture UI, editor timeline, screenshot composition, Finder integration",
+    label: "Swift 应用",
+    value: "捕捉界面、编辑时间线、截图合成、Finder 集成和隐私授权",
   },
   {
-    label: "Rust service",
-    value: "Project metadata, path handling, screenshot indexing, exports",
+    label: "Rust 服务",
+    value: "项目元数据、路径处理、截图索引和导出记录",
   },
   {
-    label: "Local paths",
-    value: "~/Movies/Open Recorder, ~/Pictures/Open Recorder, and local project files",
+    label: "本地路径",
+    value: "~/Movies/Open Recorder、~/Pictures/Open Recorder 和本地项目文件",
   },
 ];
 
@@ -102,12 +109,12 @@ function GitHubIcon(): ReactElement {
   );
 }
 
-export default function Home(): ReactElement {
+export default function ChineseHome(): ReactElement {
   return (
-    <main lang="en">
-      <nav className="top-nav" aria-label="Primary navigation">
+    <main lang="zh-CN">
+      <nav className="top-nav" aria-label="主导航">
         <div className="nav-inner">
-          <a className="brand-mark" href="#top" aria-label="Open Recorder home">
+          <a className="brand-mark" href="#top" aria-label="Open Recorder 首页">
             <Image
               src="/open-recorder-brand-image.png"
               alt=""
@@ -119,12 +126,12 @@ export default function Home(): ReactElement {
             <span>Open Recorder</span>
           </a>
           <div className="nav-links">
-            <a className="section-link" href="#features">Features</a>
-            <a className="section-link" href="#workflow">Workflow</a>
-            <a className="section-link" href="#architecture">Architecture</a>
-            <Link className="language-link" href="/zh-cn">中文</Link>
+            <a className="section-link" href="#features">功能</a>
+            <a className="section-link" href="#workflow">流程</a>
+            <a className="section-link" href="#architecture">架构</a>
+            <Link className="language-link" href="/">English</Link>
             <a className="primary-action" href={docsUrl} target="_blank" rel="noopener noreferrer">
-              Docs
+              文档
             </a>
           </div>
         </div>
@@ -132,16 +139,15 @@ export default function Home(): ReactElement {
 
       <section className="hero-section" id="top">
         <div className="section-inner hero-inner">
-          <p className="eyebrow">Native macOS capture studio</p>
+          <p className="eyebrow">原生 macOS 录屏工作台</p>
           <h1>Open Recorder</h1>
           <p className="hero-lede">
-            Record your screen, capture screenshots, shape zooms, cursor, and
-            camera on a native timeline, then export polished MOV, MP4, GIF, or
-            PNG handoffs without a cloud pipeline.
+            录制屏幕、捕捉截图，在原生时间线上调整缩放、光标和摄像头，
+            然后导出精致的 MOV、MP4、GIF 或 PNG，无需云端处理。
           </p>
           <div className="hero-actions">
             <a className="primary-action" href={docsUrl} target="_blank" rel="noopener noreferrer">
-              Docs
+              文档
             </a>
             <a
               className="secondary-action"
@@ -149,14 +155,14 @@ export default function Home(): ReactElement {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <GitHubIcon /> Source
+              <GitHubIcon /> 源码
             </a>
           </div>
 
-          <div className="hero-media" aria-label="Open Recorder product demo">
+          <div className="hero-media" aria-label="Open Recorder 产品演示">
             <Image
               src="/open-recorder-demo.gif"
-              alt="Open Recorder app demo showing a macOS capture workflow"
+              alt="Open Recorder 应用演示，展示 macOS 捕捉工作流"
               width={1280}
               height={720}
               priority
@@ -166,7 +172,7 @@ export default function Home(): ReactElement {
         </div>
       </section>
 
-      <section className="proof-band" aria-label="Project highlights">
+      <section className="proof-band" aria-label="项目亮点">
         <div className="section-inner proof-grid">
           {proofPoints.map(([value, label]) => (
             <div className="proof-item" key={value}>
@@ -180,8 +186,8 @@ export default function Home(): ReactElement {
       <section className="section-shell feature-section" id="features">
         <div className="section-inner">
           <div className="section-heading">
-            <p className="eyebrow">Capture, edit, export</p>
-            <h2>A native capture studio for polished demos, docs, and share-ready clips.</h2>
+            <p className="eyebrow">捕捉、编辑、导出</p>
+            <h2>一个面向产品演示、文档和可分享短片的原生捕捉工作台。</h2>
           </div>
 
           <div className="feature-grid">
@@ -199,8 +205,8 @@ export default function Home(): ReactElement {
       <section className="workflow-section" id="workflow">
         <div className="section-inner workflow-inner">
           <div className="workflow-copy">
-            <p className="eyebrow">Built for repeated work</p>
-            <h2>Every capture moves through one calm, local flow.</h2>
+            <p className="eyebrow">为重复工作而设计</p>
+            <h2>每一次捕捉都经过一条清晰、安静、本地的流程。</h2>
           </div>
 
           <ol className="workflow-list">
@@ -220,8 +226,8 @@ export default function Home(): ReactElement {
       <section className="architecture-section" id="architecture">
         <div className="section-inner architecture-inner">
           <div>
-            <p className="eyebrow">Local-first architecture</p>
-            <h2>Swift where the Mac matters. Rust where durability matters.</h2>
+            <p className="eyebrow">本地优先架构</p>
+            <h2>需要贴近 Mac 的地方交给 Swift，需要耐久性的地方交给 Rust。</h2>
           </div>
 
           <div className="architecture-panel">
@@ -238,11 +244,11 @@ export default function Home(): ReactElement {
       <section className="closing-section">
         <div className="section-inner closing-inner">
           <div>
-            <p className="eyebrow">Open source on GitHub</p>
-            <h2>Make your next product demo feel finished.</h2>
+            <p className="eyebrow">GitHub 开源项目</p>
+            <h2>让你的下一条产品演示真正完成。</h2>
           </div>
           <a className="primary-action" href={sourceUrl} target="_blank" rel="noopener noreferrer">
-            View repository
+            查看仓库
           </a>
         </div>
       </section>
@@ -250,7 +256,7 @@ export default function Home(): ReactElement {
       <footer className="site-footer">
         <div className="section-inner footer-inner">
           <span>Open Recorder</span>
-          <span>Apache 2.0 · Built with Swift and Rust</span>
+          <span>Apache 2.0 · 使用 Swift 和 Rust 构建</span>
         </div>
       </footer>
     </main>

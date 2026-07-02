@@ -49,7 +49,7 @@ struct OnboardingView: View {
             }
             .padding(.top, 42)
 
-            Text(driver.state.statusMessage)
+            Text(L10n.string(driver.state.statusMessage))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.48))
                 .multilineTextAlignment(.center)
@@ -176,11 +176,11 @@ private struct OnboardingPermissionRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 34) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.90))
 
-                Text(description)
+                Text(L10n.string(description))
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(Theme.fgSubtle)
                     .lineLimit(3)
@@ -194,7 +194,7 @@ private struct OnboardingPermissionRow: View {
                         Image(systemName: "checkmark")
                             .font(.system(size: 15, weight: .semibold))
                     }
-                    Text(buttonTitle)
+                    Text(L10n.string(buttonTitle))
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)

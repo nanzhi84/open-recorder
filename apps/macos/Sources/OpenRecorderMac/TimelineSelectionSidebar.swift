@@ -254,15 +254,15 @@ struct TimelineSelectionSidebar: View {
 
     private var selectionTitle: String {
         if let clip = edits.selectedClip(duration: playback.duration) {
-            return "Selected Clip \(clip.index + 1)"
+            return L10n.string("Selected Clip %d", clip.index + 1)
         }
         if let clip = edits.selectedCameraClip(duration: playback.duration, fallback: defaultCameraSettings) {
-            return clip.settings.clamped.enabled ? "Selected Camera" : "Hidden Camera"
+            return L10n.string(clip.settings.clamped.enabled ? "Selected Camera" : "Hidden Camera")
         }
         if let kind = edits.selectedKind {
-            return "Selected \(kind.title)"
+            return L10n.string("Selected %@", L10n.string(kind.title))
         }
-        return "Selection"
+        return L10n.string("Selection")
     }
 
     private var selectionSubtitle: String {
@@ -275,7 +275,7 @@ struct TimelineSelectionSidebar: View {
         if let kind = edits.selectedKind, let id = edits.selectedID, let span = selectedRegionSpan(kind: kind, id: id) {
             return "\(formatPlaybackTime(span.start)) - \(formatPlaybackTime(span.end))"
         }
-        return "No active segment"
+        return L10n.string("No active segment")
     }
 
     private var selectionAccent: Color {
@@ -419,11 +419,11 @@ private struct TimelineSelectionInfoRow: View {
 
     var body: some View {
         HStack {
-            Text(title)
+            Text(L10n.string(title))
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
             Spacer()
-            Text(value)
+            Text(L10n.string(value))
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.secondary.opacity(0.78))
         }
@@ -445,7 +445,11 @@ private struct TimelineSelectionActionButton: View {
 
     var body: some View {
         StudioButton(hitTarget: .rounded(8), action: action) {
-            Label(title, systemImage: symbolName)
+            Label {
+                Text(L10n.string(title))
+            } icon: {
+                Image(systemName: symbolName)
+            }
                 .font(.system(size: 11, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .frame(height: 34)
@@ -481,8 +485,8 @@ private struct TimelineClipSpeedPicker: View {
                                 .stroke(isSelected ? Theme.timelineClipBorder : Theme.overlay, lineWidth: isSelected ? 1.5 : 1)
                         }
                 }
-                .help("Set clip speed to \(TimelineClipSpeed.label(value))")
-                .accessibilityLabel("Set clip speed to \(TimelineClipSpeed.label(value))")
+                .help(L10n.string("Set clip speed to %@", TimelineClipSpeed.label(value)))
+                .accessibilityLabel(L10n.string("Set clip speed to %@", TimelineClipSpeed.label(value)))
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
@@ -525,8 +529,8 @@ private struct TimelineZoomDepthPicker: View {
                                     .stroke(isSelected ? Theme.accent.opacity(0.42) : Theme.overlay, lineWidth: isSelected ? 1.5 : 1)
                             }
                     }
-                    .help("Set zoom depth to \(TimelineZoomDepth.label(value))")
-                    .accessibilityLabel("Set zoom depth to \(TimelineZoomDepth.label(value))")
+                    .help(L10n.string("Set zoom depth to %@", TimelineZoomDepth.label(value)))
+                    .accessibilityLabel(L10n.string("Set zoom depth to %@", TimelineZoomDepth.label(value)))
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
@@ -546,7 +550,7 @@ private struct TimelineZoomStylePicker: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(preset.title)
+                Text(L10n.string(preset.title))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Color.secondary.opacity(0.78))
             }
@@ -559,7 +563,7 @@ private struct TimelineZoomStylePicker: View {
                             preset = value
                         }
                     } label: {
-                        Text(value.shortTitle)
+                        Text(L10n.string(value.shortTitle))
                             .font(.system(size: 10, weight: .semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.65)
@@ -572,8 +576,8 @@ private struct TimelineZoomStylePicker: View {
                                     .stroke(isSelected ? Theme.accent.opacity(0.42) : Theme.overlay, lineWidth: isSelected ? 1.5 : 1)
                             }
                     }
-                    .help("Set zoom style to \(value.title)")
-                    .accessibilityLabel("Set zoom style to \(value.title)")
+                    .help(L10n.string("Set zoom style to %@", L10n.string(value.title)))
+                    .accessibilityLabel(L10n.string("Set zoom style to %@", L10n.string(value.title)))
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }

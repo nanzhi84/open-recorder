@@ -154,7 +154,7 @@ struct SourceTypeButton: View {
                     .font(.system(size: 13, weight: .semibold))
                     .frame(width: 22, height: 22)
                     .background(Color.white.opacity(0.055), in: Circle())
-                Text(sourceType.title)
+                Text(L10n.string(sourceType.title))
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
             }

@@ -35,7 +35,10 @@ struct AreaSelectionWindowView: View {
                         .font(.system(size: 26, weight: .medium))
                     Text("Drag to select an area")
                         .font(.system(size: 18, weight: .semibold))
-                    Text("Release to start \(model.captureMode == .recording ? "recording" : "capturing"). Press Esc to cancel.")
+                    Text(L10n.string(
+                        "Release to start %@. Press Esc to cancel.",
+                        L10n.string(model.captureMode == .recording ? "recording" : "capturing")
+                    ))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
                 }

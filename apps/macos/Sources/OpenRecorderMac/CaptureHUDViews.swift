@@ -239,7 +239,7 @@ struct CaptureHUD: View {
 
         if options.state.includeMicrophone && options.state.canChangeOptions {
             button.contextMenu {
-                Button("Microphone: \(options.state.selectedMicrophoneDeviceName)") {}
+                Button(L10n.string("Microphone: %@", options.state.selectedMicrophoneDeviceName)) {}
                     .disabled(true)
                 Divider()
                 Button("Change Device...") {
@@ -268,7 +268,7 @@ struct CaptureHUD: View {
 
         if options.state.includeCamera && options.state.canChangeOptions {
             button.contextMenu {
-                Button("Camera: \(options.state.selectedCameraDeviceName)") {}
+                Button(L10n.string("Camera: %@", options.state.selectedCameraDeviceName)) {}
                     .disabled(true)
                 Divider()
                 Button("Change Device...") {
@@ -282,7 +282,7 @@ struct CaptureHUD: View {
 
     private var narrowCaptureOptionsMenu: some View {
         StudioMenu(hitTarget: .circle, help: "Capture Options") {
-            Button(options.state.includeSystemAudio ? "Turn Off System Audio" : "Turn On System Audio") {
+            Button(L10n.string(options.state.includeSystemAudio ? "Turn Off System Audio" : "Turn On System Audio")) {
                 model.toggleSystemAudio()
             }
             .disabled(!options.state.canChangeOptions)

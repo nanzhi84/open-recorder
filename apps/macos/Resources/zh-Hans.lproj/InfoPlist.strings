@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "Open Recorder";
+"CFBundleName" = "Open Recorder";
+"CFBundleTypeName" = "Open Recorder 项目";
+"NSCameraUsageDescription" = "当你选择在屏幕录制中加入摄像头画面时，Open Recorder 会使用摄像头。";
+"NSMicrophoneUsageDescription" = "当你选择在屏幕录制中加入讲解声音时，Open Recorder 会使用麦克风。";
+"UTTypeDescription" = "Open Recorder 项目";

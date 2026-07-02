@@ -168,10 +168,10 @@ struct MicrophoneSelectorWindowView: View {
                 .foregroundStyle(isSelected ? Theme.accent : Theme.fgSubtle)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
-                Text(subtitle)
+                Text(L10n.string(subtitle))
                     .font(.system(size: 11))
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
@@ -344,10 +344,10 @@ struct CameraSelectorWindowView: View {
                 .foregroundStyle(isSelected ? Theme.accent : Theme.fgSubtle)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
-                Text(subtitle)
+                Text(L10n.string(subtitle))
                     .font(.system(size: 11))
                     .lineLimit(1)
                     .foregroundStyle(.secondary)

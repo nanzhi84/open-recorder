@@ -184,7 +184,7 @@ struct BackgroundPickerView: View {
                                 .stroke(selectedWallpaperID == preset.id ? Theme.accent : Theme.border, lineWidth: selectedWallpaperID == preset.id ? 2 : 1)
                         }
                 }
-                .help(preset.label)
+                .help(L10n.string(preset.label))
             }
         }
     }

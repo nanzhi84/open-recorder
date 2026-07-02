@@ -214,7 +214,7 @@ struct VideoPreviewPanel: View {
             HStack(spacing: 7) {
                 PreviewAspectGlyph(preset: previewAspectPreset, isSelected: true)
                     .frame(width: 17, height: 17)
-                Text(previewAspectPreset.ratioLabel)
+                Text(L10n.string(previewAspectPreset.ratioLabel))
                     .lineLimit(1)
                 Image(systemName: "chevron.up")
                     .font(.system(size: 8, weight: .semibold))
@@ -940,12 +940,12 @@ private struct PreviewAspectDropdown: View {
                     HStack(spacing: 12) {
                         PreviewAspectGlyph(preset: option, isSelected: selection == option)
                             .frame(width: 19, height: 19)
-                        Text(option.ratioLabel)
+                        Text(L10n.string(option.ratioLabel))
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Color.primary.opacity(0.95))
                             .frame(width: 38, alignment: .leading)
                             .lineLimit(1)
-                        Text(option.menuLabel)
+                        Text(L10n.string(option.menuLabel))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(selection == option ? Color.primary.opacity(0.92) : Theme.fgMuted)
                             .lineLimit(1)

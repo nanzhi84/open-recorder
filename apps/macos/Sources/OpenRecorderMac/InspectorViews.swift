@@ -144,7 +144,7 @@ struct SettingsInspector: View {
     }
 
     private var inspectorHeader: some View {
-        Text(activeTab.title)
+        Text(L10n.string(activeTab.title))
             .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(Theme.fg.opacity(0.96))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -238,7 +238,7 @@ struct SessionAssetRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
+            Text(L10n.string(title))
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
             Text(path)
@@ -292,7 +292,7 @@ struct InspectorRailTooltip: View {
     var title: String
 
     var body: some View {
-        Text(title)
+        Text(L10n.string(title))
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(Theme.fg.opacity(0.94))
             .lineLimit(1)
@@ -317,7 +317,11 @@ struct InspectorFooterButton: View {
 
     var body: some View {
         StudioButton(hitTarget: .rounded(7), action: action) {
-            Label(title, systemImage: symbolName)
+            Label {
+                Text(L10n.string(title))
+            } icon: {
+                Image(systemName: symbolName)
+            }
                 .font(.system(size: 10, weight: .medium))
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
@@ -382,7 +386,7 @@ struct InspectorGroup<Content: View>: View {
             }
 
             HStack(spacing: 8) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.fg.opacity(0.94))
                 Spacer(minLength: 0)
@@ -415,7 +419,7 @@ struct InspectorSlider: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.fgMuted)
                     .lineLimit(1)
@@ -443,7 +447,7 @@ struct InspectorSlider: View {
                     dragFillColor: Color(red: 0.48, green: 0.48, blue: 0.50),
                     setsValueFromPointerLocation: true
                 )
-                .accessibilityLabel(title)
+                .accessibilityLabel(L10n.string(title))
 
                 sliderIcon(trailingSymbolName)
             }
@@ -878,7 +882,7 @@ struct CursorStylePicker: View {
                 let styles = CursorStyleRegistry.definitions(in: category)
                 if !styles.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(category.title)
+                        Text(L10n.string(category.title))
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(.tertiary)
 
@@ -923,7 +927,7 @@ struct CursorStyleButton: View {
             VStack(spacing: 5) {
                 CursorGlyphView(styleID: style.id, scale: 0.56)
                     .frame(width: 38, height: 34)
-                Text(style.title)
+                Text(L10n.string(style.title))
                     .font(.system(size: 10, weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
@@ -947,7 +951,7 @@ struct InspectorSwitch: View {
 
     var body: some View {
         HStack {
-            Text(title)
+            Text(L10n.string(title))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.fgMuted)
             Spacer()

@@ -91,6 +91,10 @@ cp "$service_binary" "$macos_dir/open-recorder-service"
 cp "$info_plist" "$contents_dir/Info.plist"
 cp -R "$swift_resource_bundle" "$resources_dir/"
 
+for localization_dir in "$repo_root"/apps/macos/Resources/*.lproj(N); do
+	cp -R "$localization_dir" "$resources_dir/"
+done
+
 sparkle_xcframework="$(find "$repo_root/apps/macos/.build/artifacts/sparkle" -type d -name "Sparkle.xcframework" -print 2>/dev/null | head -n 1 || true)"
 if [[ -z "$sparkle_xcframework" || ! -d "$sparkle_xcframework" ]]; then
 	print -u2 -- "Sparkle.xcframework not found under apps/macos/.build/artifacts/sparkle. Run 'cd apps/macos && swift package resolve' first."

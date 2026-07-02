@@ -417,13 +417,13 @@ private final class OpenRecorderStatusItemController: NSObject {
         if isDirectStopState {
             button.image = OpenRecorderMenuBarIcon.image
             button.contentTintColor = .systemRed
-            button.toolTip = "Stop Recording (⌘R)"
-            button.setAccessibilityLabel("Stop Recording")
+            button.toolTip = L10n.string("Stop Recording (⌘R)")
+            button.setAccessibilityLabel(L10n.string("Stop Recording"))
         } else {
             button.image = OpenRecorderMenuBarIcon.image
             button.contentTintColor = nil
-            button.toolTip = "Open Recorder"
-            button.setAccessibilityLabel("Open Recorder")
+            button.toolTip = L10n.string("Open Recorder")
+            button.setAccessibilityLabel(L10n.string("Open Recorder"))
         }
     }
 
@@ -432,32 +432,32 @@ private final class OpenRecorderStatusItemController: NSObject {
         let menu = NSMenu()
 
         if isDirectStopState {
-            menu.addItem(NSMenuItem(title: "Stop Recording", action: #selector(stopRecording), keyEquivalent: "r"))
+            menu.addItem(NSMenuItem(title: L10n.string("Stop Recording"), action: #selector(stopRecording), keyEquivalent: "r"))
             menu.items.last?.keyEquivalentModifierMask = [.command]
             menu.items.last?.target = self
             menu.addItem(.separator())
         }
 
-        let newRecording = NSMenuItem(title: "New Recording", action: #selector(newRecording), keyEquivalent: "")
+        let newRecording = NSMenuItem(title: L10n.string("New Recording"), action: #selector(newRecording), keyEquivalent: "")
         newRecording.target = self
         newRecording.isEnabled = model?.canStartNewCapture ?? false
         menu.addItem(newRecording)
 
-        let newScreenshot = NSMenuItem(title: "New Screenshot", action: #selector(newScreenshot), keyEquivalent: "")
+        let newScreenshot = NSMenuItem(title: L10n.string("New Screenshot"), action: #selector(newScreenshot), keyEquivalent: "")
         newScreenshot.target = self
         newScreenshot.isEnabled = model?.canStartNewCapture ?? false
         menu.addItem(newScreenshot)
 
         menu.addItem(.separator())
 
-        let hudTitle = model?.isHUDVisible == true ? "Hide Recorder" : "Show Recorder"
+        let hudTitle = model?.isHUDVisible == true ? L10n.string("Hide Recorder") : L10n.string("Show Recorder")
         let hudItem = NSMenuItem(title: hudTitle, action: #selector(toggleRecorderHUD), keyEquivalent: "")
         hudItem.target = self
         hudItem.isEnabled = model?.canShowCaptureUI ?? true
         menu.addItem(hudItem)
 
         if model?.lastEditorSession != nil {
-            let editorItem = NSMenuItem(title: "Show Last Editor", action: #selector(showLastEditor), keyEquivalent: "")
+            let editorItem = NSMenuItem(title: L10n.string("Show Last Editor"), action: #selector(showLastEditor), keyEquivalent: "")
             editorItem.target = self
             menu.addItem(editorItem)
         }
@@ -466,7 +466,7 @@ private final class OpenRecorderStatusItemController: NSObject {
 
         if UpdateChecker.shared.isEnabled {
             let checkForUpdatesItem = NSMenuItem(
-                title: "Check for Updates…",
+                title: L10n.string("Check for Updates…"),
                 action: #selector(checkForUpdates),
                 keyEquivalent: ""
             )
@@ -476,7 +476,7 @@ private final class OpenRecorderStatusItemController: NSObject {
             menu.addItem(.separator())
         }
 
-        let quitItem = NSMenuItem(title: "Quit Open Recorder", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L10n.string("Quit Open Recorder"), action: #selector(quit), keyEquivalent: "q")
         quitItem.keyEquivalentModifierMask = [.command]
         quitItem.target = self
         menu.addItem(quitItem)

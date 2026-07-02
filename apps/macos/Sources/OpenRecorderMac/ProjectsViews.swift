@@ -102,7 +102,7 @@ struct ProjectsStudioView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
-                        Text(selectedTab.listTitle)
+                        Text(L10n.string(selectedTab.listTitle))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -226,7 +226,7 @@ struct ProjectLibraryTabBar: View {
                     HStack(spacing: 8) {
                         Image(systemName: tab.symbolName)
                             .font(.system(size: 13, weight: .semibold))
-                        Text(tab.title)
+                        Text(L10n.string(tab.title))
                             .font(.system(size: 12, weight: .semibold))
                             .lineLimit(1)
                         Text("\(count(for: tab))")
@@ -280,14 +280,18 @@ struct ProjectActionCard: View {
             HStack(spacing: 8) {
                 Image(systemName: symbolName)
                     .foregroundStyle(Theme.accent)
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 16, weight: .semibold))
             }
-            Text(description)
+            Text(L10n.string(description))
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
             StudioButton(hitTarget: .rounded(8), action: action) {
-                Label(buttonTitle, systemImage: symbolName)
+                Label {
+                    Text(L10n.string(buttonTitle))
+                } icon: {
+                    Image(systemName: symbolName)
+                }
                     .font(.system(size: 13, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
@@ -393,9 +397,9 @@ struct EmptyProjectsPanel: View {
                 .frame(width: 64, height: 64)
                 .foregroundStyle(Theme.accent)
                 .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
-            Text(tab == .screenRecordings ? "No recent recordings yet" : "No recent screenshots yet")
+            Text(L10n.string(tab == .screenRecordings ? "No recent recordings yet" : "No recent screenshots yet"))
                 .font(.system(size: 16, weight: .semibold))
-            Text(tab == .screenRecordings ? "Screen recording projects will appear here after you save or open one." : "Screenshot projects will appear here after you capture or open one.")
+            Text(L10n.string(tab == .screenRecordings ? "Screen recording projects will appear here after you save or open one." : "Screenshot projects will appear here after you capture or open one."))
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
@@ -419,7 +423,7 @@ func formattedProjectDate(_ value: String) -> String {
     }
 
     let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.locale = .current
     formatter.calendar = Calendar(identifier: .gregorian)
     formatter.dateFormat = "MMM d, h:mm a"
     return formatter.string(from: date)

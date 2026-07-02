@@ -341,7 +341,7 @@ struct StudioButton<Label: View>: View {
         }
 
         if let help {
-            control.help(help)
+            control.help(L10n.string(help))
         } else {
             control
         }
@@ -385,7 +385,7 @@ struct StudioMenu<Label: View, Content: View>: View {
         }
 
         if let help {
-            control.help(help)
+            control.help(L10n.string(help))
         } else {
             control
         }
@@ -550,8 +550,12 @@ struct HUDPrimaryButton: View {
     var body: some View {
         StudioButton(hitTarget: .capsule, action: action) {
             HStack(spacing: 8) {
-                Label(title, systemImage: symbolName)
-                    .labelStyle(.titleAndIcon)
+                Label {
+                    Text(L10n.string(title))
+                } icon: {
+                    Image(systemName: symbolName)
+                }
+                .labelStyle(.titleAndIcon)
 
                 if let shortcutText {
                     Text(shortcutText)
@@ -667,7 +671,7 @@ struct CaptureModeButton: View {
                     .font(.system(size: 13, weight: .semibold))
                     .frame(width: 22, height: 22)
                     .background(isActive ? Color.black.opacity(0.08) : Color.white.opacity(0.055), in: Circle())
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
             }
@@ -715,11 +719,11 @@ struct FlowLabel: View {
                 .frame(width: 24, height: 24)
                 .background(dotColor.opacity(0.14), in: Circle())
             VStack(alignment: .leading, spacing: 1) {
-                Text(label.uppercased())
+                Text(L10n.string(label).uppercased())
                     .font(.system(size: 9, weight: .bold))
                     .lineLimit(1)
                     .foregroundStyle(Theme.fgSubtle)
-                Text(value)
+                Text(L10n.string(value))
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                     .foregroundStyle(Theme.fgMuted)
@@ -752,7 +756,7 @@ struct CompactFlowLabel: View {
     var body: some View {
         HStack(spacing: 7) {
             StatusDot(tone: tone)
-            Text(value)
+            Text(L10n.string(value))
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -803,7 +807,7 @@ struct SourceChip: View {
                 .foregroundStyle(Theme.fgMuted)
                 .frame(width: 24, height: 24)
                 .background(Color.white.opacity(0.055), in: Circle())
-            Text(source?.name ?? "Choose source")
+            Text(source?.name ?? L10n.string("Choose source"))
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -833,7 +837,7 @@ struct CaptureStatusChip: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.statusError.opacity(0.95))
             }
-            Text(message)
+            Text(L10n.string(message))
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -865,8 +869,8 @@ struct HUDToggle: View {
                 }
         }
         .disabled(isDisabled)
-        .accessibilityLabel(title)
-        .accessibilityValue(isActive ? "On" : "Off")
+        .accessibilityLabel(L10n.string(title))
+        .accessibilityValue(L10n.string(isActive ? "On" : "Off"))
     }
 
     private var foregroundStyle: Color {

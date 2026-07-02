@@ -99,7 +99,7 @@ private struct SettingsZoomPresetPicker: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.fg)
                 Spacer()
-                Text(selection.title)
+                Text(L10n.string(selection.title))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
             }
@@ -110,7 +110,7 @@ private struct SettingsZoomPresetPicker: View {
                     StudioButton(hitTarget: .rounded(7)) {
                         selection = preset
                     } label: {
-                        Text(preset.shortTitle)
+                        Text(L10n.string(preset.shortTitle))
                             .font(.system(size: 10, weight: .semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
@@ -123,8 +123,8 @@ private struct SettingsZoomPresetPicker: View {
                                     .stroke(isSelected ? Theme.accent.opacity(0.42) : Theme.overlay, lineWidth: isSelected ? 1.5 : 1)
                             }
                     }
-                    .help(preset.title)
-                    .accessibilityLabel("Set auto zoom style to \(preset.title)")
+                    .help(L10n.string(preset.title))
+                    .accessibilityLabel(L10n.string("Set auto zoom style to %@", L10n.string(preset.title)))
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
@@ -144,7 +144,7 @@ struct SettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
+            Text(L10n.string(title))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.fgMuted)
             content
@@ -164,10 +164,10 @@ struct SettingsRow: View {
 
     var body: some View {
         HStack {
-            Text(title)
+            Text(L10n.string(title))
                 .foregroundStyle(Theme.fgMuted)
             Spacer()
-            Text(value)
+            Text(L10n.string(value))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundStyle(Theme.fg)
@@ -183,10 +183,10 @@ struct FolderRow: View {
 
     var body: some View {
         HStack {
-            Text(title)
+            Text(L10n.string(title))
                 .foregroundStyle(Theme.fgMuted)
             Spacer()
-            Text(path ?? "Unknown")
+            Text(path ?? L10n.string("Unknown"))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundStyle(Theme.fg)
@@ -211,7 +211,7 @@ struct SettingsToggleRow: View {
 
     var body: some View {
         HStack {
-            Text(title)
+            Text(L10n.string(title))
                 .foregroundStyle(Theme.fgMuted)
             Spacer()
             Toggle("", isOn: $isOn)

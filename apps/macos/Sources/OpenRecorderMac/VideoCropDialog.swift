@@ -212,14 +212,14 @@ struct VideoCropDialog: View {
 
             Menu {
                 ForEach(VideoCropAspect.allCases) { option in
-                    Button(option.title) {
+                    Button(L10n.string(option.title)) {
                         applyAspect(option)
                     }
                 }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "rectangle.on.rectangle")
-                    Text(driver.state.aspect.title)
+                    Text(L10n.string(driver.state.aspect.title))
                     Image(systemName: "chevron.down")
                         .font(.system(size: 9, weight: .semibold))
                 }
@@ -265,7 +265,7 @@ struct VideoCropDialog: View {
                     )
             }
             .buttonStyle(.plain)
-            .help("Keyboard shortcuts")
+            .help(L10n.string("Keyboard shortcuts"))
             .popover(isPresented: driver.shortcutBinding, arrowEdge: .top) {
                 VideoCropKeyboardShortcutsDropdown()
             }
@@ -401,7 +401,7 @@ private struct VideoCropKeyboardShortcutsDropdown: View {
                                 .stroke(Theme.border, lineWidth: 1)
                         }
 
-                    Text(shortcut.action)
+                    Text(L10n.string(shortcut.action))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.64))
                         .lineLimit(1)

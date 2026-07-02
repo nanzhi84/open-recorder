@@ -165,7 +165,7 @@ private struct RecordingCountdownOverlay: View {
                     .foregroundStyle(Color.white)
                     .shadow(color: Color.black.opacity(0.55), radius: 18, y: 8)
 
-                Text("Recording \(state.sourceName)")
+                Text(L10n.string("Recording %@", state.sourceName))
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.82))
                     .lineLimit(1)

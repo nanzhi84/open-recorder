@@ -240,9 +240,9 @@ private struct ScreenshotExportActionCard: View {
                     .background(isPrimary ? Color.white.opacity(0.16) : Theme.accent.opacity(0.11), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
+                    Text(L10n.string(title))
                         .font(.system(size: 13, weight: .semibold))
-                    Text(subtitle)
+                    Text(L10n.string(subtitle))
                         .font(.system(size: 10))
                         .foregroundStyle(isPrimary ? Color.white.opacity(0.74) : .secondary)
                         .lineLimit(1)

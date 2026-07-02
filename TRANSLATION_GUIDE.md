@@ -1,64 +1,70 @@
 # Translation Guide
 
-This project uses a namespace-based i18n setup so contributors can localize safely without changing app logic.
+Open Recorder currently localizes two user-facing surfaces:
 
-## Locale Files
+- the native macOS app
+- the Next.js landing page
 
-All locale files live under:
+English remains the source language. Simplified Chinese (`zh-Hans` / `zh-CN`) is the first localized version.
 
-- `src/i18n/locales/en/`
-- `src/i18n/locales/es/`
+## macOS App
 
-Each locale has the same namespace files:
+macOS localization files live in:
 
-- `common.json`
-- `launch.json`
-- `editor.json`
-- `timeline.json`
-- `settings.json`
-- `dialogs.json`
-- `shortcuts.json`
-
-English (`en`) is the source of truth for key structure.
-
-## Key Rules
-
-- Keep the same key paths across locales.
-- Do not rename existing keys unless coordinated with code changes.
-- Add new keys to `en` first, then mirror into all other locales.
-- Prefer descriptive, stable keys. Example: `app.editorTitle`.
-- Interpolation is supported with `{{name}}` style placeholders.
-
-## How Translation Is Read
-
-- Keys with a namespace prefix like `settings.export.title` use that namespace.
-- Keys without a namespace default to `common`.
-- Missing translations fall back to English, then to the provided fallback string, then to the key.
-
-## Validate Locale Structure
-
-Run:
-
-```bash
-npm run i18n:check
+```text
+apps/macos/Resources/<locale>.lproj/
 ```
 
-This checks for:
+For Simplified Chinese:
 
-- Missing namespace files
-- Missing keys compared to `en`
-- Extra keys not present in `en`
+- `apps/macos/Resources/zh-Hans.lproj/Localizable.strings`
+- `apps/macos/Resources/zh-Hans.lproj/InfoPlist.strings`
 
-## Contributor Workflow
+The packaging script copies every `apps/macos/Resources/*.lproj` directory into the final `.app/Contents/Resources` folder. Keep `CFBundleLocalizations` in `apps/macos/Resources/Info.plist` aligned with the bundled locales.
 
-1. Pull latest `main`.
-2. Update `en/<namespace>.json` with new keys if needed.
-3. Add matching keys to other locale files.
-4. Run `npm run i18n:check`.
-5. Run app locally (`npm run dev`) and spot-check UI text.
-6. Open PR with a short summary of changed namespaces.
+Most simple SwiftUI literals such as `Text("Settings")`, `Button("Cancel")`, and `Label("Export Video", systemImage: ...)` resolve through `Localizable.strings` when the packaged app runs under a matching system language. UI text that is passed through variables should use `L10n.string(...)` before display.
 
-## Scope Notes
+## Landing Page
 
-Current framework is app-wide and ready for full localization rollout.
-Not every UI string is migrated yet. Migration should be done incrementally by namespace to keep PRs reviewable and low-risk.
+The English landing page is:
+
+```text
+apps/landing/src/app/page.tsx
+```
+
+The Simplified Chinese landing page is:
+
+```text
+apps/landing/src/app/zh-cn/page.tsx
+```
+
+Both pages should keep the same sections, proof points, workflow steps, and calls to action unless a locale-specific change is intentional.
+
+## Validation
+
+Validate macOS string files:
+
+```bash
+plutil -lint apps/macos/Resources/zh-Hans.lproj/Localizable.strings apps/macos/Resources/zh-Hans.lproj/InfoPlist.strings
+```
+
+Validate the native app:
+
+```bash
+make test-macos
+```
+
+Validate the landing page:
+
+```bash
+pnpm --dir apps/landing lint
+pnpm --dir apps/landing build
+```
+
+## Contributor Rules
+
+- Keep English keys stable in `.strings` files.
+- Prefer exact English UI text as the localization key.
+- Use `%@` and `%d` placeholders for formatted Swift strings.
+- Do not translate file names, device names, project titles, paths, or user-entered text.
+- If a SwiftUI string comes from a variable and should be localized, wrap it with `L10n.string(...)`.

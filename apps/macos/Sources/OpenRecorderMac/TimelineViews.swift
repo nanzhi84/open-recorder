@@ -289,7 +289,7 @@ private struct TimelinePlayPauseButton: View {
         }
         .disabled(playback.player == nil)
         .opacity(playback.player == nil ? 0.42 : 1)
-        .accessibilityLabel(title)
+        .accessibilityLabel(L10n.string(title))
         .onHover { hovering in
             isHovering = hovering
         }
@@ -312,7 +312,7 @@ private struct TimelineToolbarIconButton: View {
                 .background(Color.white.opacity(isHovering && isEnabled ? 0.10 : 0.001), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .disabled(!isEnabled)
-        .accessibilityLabel(title)
+        .accessibilityLabel(L10n.string(title))
         .onHover { hovering in
             isHovering = hovering
         }
@@ -351,7 +351,7 @@ private struct TimelineTimeDisplay: View {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(Theme.borderSubtle, lineWidth: 1)
         }
-        .accessibilityLabel("Playback time \(formatPlaybackTime(currentTime)) of \(formatPlaybackTime(duration))")
+        .accessibilityLabel(L10n.string("Playback time %@ of %@", formatPlaybackTime(currentTime), formatPlaybackTime(duration)))
     }
 }
 
@@ -375,7 +375,7 @@ private struct TimelinePreviewSpeedButton: View {
         }
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.5)
-        .accessibilityLabel("Preview playback speed \(playback.previewPlaybackSpeedLabel())")
+        .accessibilityLabel(L10n.string("Preview playback speed %@", playback.previewPlaybackSpeedLabel()))
         .onHover { hovering in
             isHovering = hovering
         }
@@ -1004,7 +1004,7 @@ struct TimelineLayerRow: View {
                             }
                     )
                 if regions.isEmpty {
-                    Text(emptyMessage)
+                    Text(L10n.string(emptyMessage))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.secondary.opacity(0.64))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -1069,7 +1069,7 @@ struct TimelineCameraLayerRow: View {
                     )
 
                 if cameraClips.isEmpty {
-                    Text(emptyMessage)
+                    Text(L10n.string(emptyMessage))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.secondary.opacity(0.64))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -1224,7 +1224,7 @@ struct TimelineRegionItem: View {
         .position(x: startX + itemWidth / 2, y: TimelineMetrics.layerHeight / 2)
         .simultaneousGesture(TapGesture(count: 2).onEnded { performPrimaryEdit() })
         .gesture(moveGesture())
-        .accessibilityLabel("\(kind.title) region")
+        .accessibilityLabel(L10n.string("%@ region", L10n.string(kind.title)))
         .accessibilityValue(regionAccessibilityValue)
         .accessibilityHint(regionAccessibilityHint)
         .accessibilityAddTraits(isSelected ? .isSelected : [])

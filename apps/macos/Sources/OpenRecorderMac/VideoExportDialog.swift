@@ -64,7 +64,7 @@ struct VideoExportDialog: View {
                 .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(headerTitle)
+                Text(L10n.string(headerTitle))
                     .font(.system(size: 17, weight: .semibold))
                 Text(headerSubtitle)
                     .font(.system(size: 11))
@@ -84,10 +84,10 @@ struct VideoExportDialog: View {
                 .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(format == .gif ? "GIF export" : "Movie export")
+                Text(L10n.string(format == .gif ? "GIF export" : "Movie export"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.primary)
-                Text(format == .gif ? "Animated for quick sharing" : "Optimized for screen recordings")
+                Text(L10n.string(format == .gif ? "Animated for quick sharing" : "Optimized for screen recordings"))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
@@ -124,7 +124,7 @@ struct VideoExportDialog: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(progressTitle)
+                        Text(L10n.string(progressTitle))
                             .font(.system(size: 13, weight: .semibold))
                         Text(selectedExportSummary)
                             .font(.system(size: 11))
@@ -193,7 +193,7 @@ struct VideoExportDialog: View {
         VStack(alignment: .leading, spacing: 16) {
             ExportMessageRow(
                 symbolName: "checkmark.circle.fill",
-                message: exportedFileName.map { "Saved \($0)" } ?? "Video saved successfully.",
+                message: exportedFileName.map { L10n.string("Saved %@", $0) } ?? "Video saved successfully.",
                 tint: .green
             )
 
@@ -336,16 +336,16 @@ struct VideoExportDialog: View {
     private var selectedExportSummary: String {
         switch format {
         case .gif:
-            "\(gifSize.title) \(format.title) · \(frameRate.title)"
+            "\(L10n.string(gifSize.title)) \(format.title) · \(L10n.string(frameRate.title))"
         case .mp4:
-            "\(resolution.title) \(format.title) · \(frameRate.title) · \(quality.title)"
+            "\(L10n.string(resolution.title)) \(format.title) · \(L10n.string(frameRate.title)) · \(L10n.string(quality.title))"
         case .mov:
-            "\(resolution.title) \(format.title) · \(frameRate.title)"
+            "\(L10n.string(resolution.title)) \(format.title) · \(L10n.string(frameRate.title))"
         }
     }
 
     private var selectedSizeTitle: String {
-        format == .gif ? gifSize.title : resolution.title
+        format == .gif ? L10n.string(gifSize.title) : L10n.string(resolution.title)
     }
 
     private var displayedProgress: Double {
@@ -402,10 +402,10 @@ struct VideoExportDialog: View {
     private var headerSubtitle: String {
         switch phase {
         case .exporting: "\(VideoExportProgressPresentation.percentText(for: displayedProgress)) · \(selectedExportSummary)"
-        case .saving: "Choose where to save the completed \(format.title)."
-        case .savePending: "Save without rendering again."
-        case .success: "Your \(format.title) export is ready."
-        case .failed: "Adjust settings and try again."
+        case .saving: L10n.string("Choose where to save the completed %@.", format.title)
+        case .savePending: L10n.string("Save without rendering again.")
+        case .success: L10n.string("Your %@ export is ready.", format.title)
+        case .failed: L10n.string("Adjust settings and try again.")
         case .idle: selectedExportSummary
         }
     }
@@ -428,7 +428,7 @@ private struct ExportSummaryMetric: View {
 
     var body: some View {
         VStack(spacing: 1) {
-            Text(title.uppercased())
+            Text(L10n.string(title).uppercased())
                 .font(.system(size: 8, weight: .bold))
                 .foregroundStyle(.secondary)
             Text(value)
@@ -465,9 +465,9 @@ private struct ExportPickerSettingRow<Option: Hashable & Identifiable>: View {
                 .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .semibold))
-                Text(detail)
+                Text(L10n.string(detail))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -475,9 +475,9 @@ private struct ExportPickerSettingRow<Option: Hashable & Identifiable>: View {
 
             Spacer(minLength: 12)
 
-            Picker(title, selection: $selection) {
+            Picker(L10n.string(title), selection: $selection) {
                 ForEach(options) { option in
-                    Text(option[keyPath: optionTitle])
+                    Text(L10n.string(option[keyPath: optionTitle]))
                         .tag(option)
                 }
             }
@@ -507,16 +507,16 @@ private struct ExportStaticSettingRow: View {
                 .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .semibold))
-                Text(detail)
+                Text(L10n.string(detail))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 12)
 
-            Text(value)
+            Text(L10n.string(value))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.primary)
                 .frame(minWidth: 58)
@@ -549,16 +549,16 @@ private struct ExportToggleSettingRow: View {
                 .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .semibold))
-                Text(detail)
+                Text(L10n.string(detail))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 12)
 
-            Toggle(title, isOn: $isOn)
+            Toggle(L10n.string(title), isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .disabled(isDisabled)
@@ -639,7 +639,7 @@ private struct ExportDialogButton: View {
                     Image(systemName: systemImage)
                         .font(.system(size: 13, weight: .semibold))
                 }
-                Text(title)
+                Text(L10n.string(title))
                     .lineLimit(1)
             }
             .font(.system(size: 12, weight: .semibold))
@@ -690,7 +690,7 @@ private struct ExportMessageRow: View {
                 .foregroundStyle(tint)
                 .frame(width: 24, height: 24)
                 .background(tint.opacity(0.12), in: Circle())
-            Text(message)
+            Text(L10n.string(message))
                 .font(.system(size: 12))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)

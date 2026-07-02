@@ -174,7 +174,7 @@ struct StudioNavButton: View {
                 Image(systemName: symbolName)
                     .font(.system(size: 14, weight: .semibold))
                     .frame(width: 18, height: 18)
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
             }
@@ -235,7 +235,7 @@ struct EditorHistoryButton: View {
                 }
         }
         .disabled(!isEnabled)
-        .accessibilityLabel(title)
+        .accessibilityLabel(L10n.string(title))
     }
 }
 
@@ -373,7 +373,7 @@ struct StudioTitleBar: View {
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
             }
-            Text(title)
+            Text(titleText)
                 .font(.system(size: 14, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -399,6 +399,18 @@ struct StudioTitleBar: View {
             } else {
                 "Open Recorder Editor"
             }
+        }
+    }
+
+    private var titleText: String {
+        switch workspace.state.selectedSection {
+        case .editor:
+            if editorSession != nil || model.currentVideoURL != nil || model.currentScreenshotURL != nil {
+                return title
+            }
+            return L10n.string(title)
+        case .capture, .projects, .settings:
+            return L10n.string(title)
         }
     }
 
@@ -477,7 +489,7 @@ struct EditorShortcutsHelpDialog: View {
                                     .stroke(Theme.border, lineWidth: 1)
                             }
 
-                        Text(shortcut.action)
+                        Text(L10n.string(shortcut.action))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Color.secondary)
 
